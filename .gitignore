@@ -1,0 +1,5 @@
+# 项目排除路径
+/cmake-build-androidarm/
+/cmake-build-androidarm64/
+/cmake-build-androidx64/
+/cmake-build-androidx86/
