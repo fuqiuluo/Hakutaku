@@ -13,4 +13,4 @@ if(HAKUTAKU_64BIT)
 endif()
 
 add_executable(Hakutaku main.cpp
-        core/Hakutaku.h core/Hakutaku.cpp core/Platform.h core/Platform.cpp)
+        core/Hakutaku.hpp)

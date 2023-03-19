@@ -1,6 +1,5 @@
 #include <iostream>
-#include "core/Platform.h"
-#include "core/Hakutaku.h"
+#include "core/Hakutaku.hpp"
 
 int main() {
     std::string packageName = "com.tencent.mobileqq";
@@ -12,11 +11,12 @@ int main() {
     } else {
         printf("Pid: %d\n", pid);
     }
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
     printf("Stop Process(Pid: %d) for 5sec.\n", pid);
-    Hakutaku::Platform::stopProcess(pid);
+    process.stop();
     sleep(5);
+    process.recover();
     printf("Recover Process(Pid: %d).\n", pid);
-    Hakutaku::Platform::recoverProcess(pid);
 
     std::cout << "End Hakutaku!" << std::endl;
     return 0;
