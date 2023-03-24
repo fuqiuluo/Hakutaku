@@ -2,7 +2,7 @@
 #include "core/Hakutaku.hpp"
 
 int main() {
-    std::string packageName = "com.tencent.mobileqq";
+    std::string packageName = "bin.mt.plus";
     Pid pid = Hakutaku::getPid(packageName);
     printf("Package: %s\n", packageName.c_str());
     if (pid == 0) {
