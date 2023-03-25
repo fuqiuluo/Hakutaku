@@ -95,10 +95,10 @@ namespace Hakutaku {
         Page* _next;
 
     public:
-        Page(Pointer start, Pointer end): _start(start), _end(end) {
-            _next = nullptr;
-            _before = nullptr;
-        }
+        Page(Pointer start, Pointer end);
+
+        Page(const Page &) = delete;
+        Page &operator=(const Page &) = delete;
 
         [[nodiscard]] Pointer start() const;
 
@@ -111,13 +111,26 @@ namespace Hakutaku {
         friend class Maps;
     };
 
+    class Address {
+    public:
+        explicit Address(Pointer addr);
+
+        Address(Pointer addr, Page* page);
+
+        Pointer addr;
+        std::shared_ptr<Page> currentPage;
+    };
+
     class Maps {
     private:
-        Page *START = nullptr;
-        Page *END = nullptr;
+        Page *START;
+        Page *END;
 
     public:
+        Maps();
         ~Maps();
+        Maps(const Maps &) = delete;
+        Maps &operator=(const Maps &) = delete;
 
         void set(Page *start, Page *end);
 
@@ -148,8 +161,10 @@ namespace Hakutaku {
         WorkMode workMode;
 
         explicit Process(pid_t pid);
-
         ~Process();
+        // no copy me, if i have a memFd -> it will be unnaturally released!
+        Process(const Process &) = default;
+        Process &operator=(const Process &) = delete;
 
         void stop() const;
 
@@ -157,10 +172,11 @@ namespace Hakutaku {
 
         void kill() const;
 
+        Pointer findModuleBase(const char *module_name, bool matchBss = false) const;
+
         [[nodiscard]] bool isMissingPage(Pointer addr) const;
 
         int getMaps(Maps &dstMap, Range range) const;
-        //Maps getMaps(Range range) const;
 
         int read(Pointer addr, void *data, size_t len);
         int write(Pointer addr, void *data, size_t len);
@@ -335,6 +351,17 @@ namespace Hakutaku {
         _before->_next = _next;
     }
 
+    Page::Page(Pointer start, Pointer end): _start(start), _end(end) {
+        _next = nullptr;
+        _before = nullptr;
+    }
+
+    Address::Address(Pointer addr): addr(addr) {
+        currentPage = std::shared_ptr<Page>(nullptr);
+    }
+
+    Address::Address(Pointer addr, Page *page): addr(addr), currentPage(page) {}
+
     Maps::~Maps() {
         if (START != nullptr) {
             clear();
@@ -408,6 +435,11 @@ namespace Hakutaku {
         return END;
     }
 
+    Maps::Maps() {
+        START = nullptr;
+        END = nullptr;
+    }
+
     inline bool isMatch(char *buff, Range range) {
         if (range == RANGE_ALL)
             return true;
@@ -471,17 +503,24 @@ namespace Hakutaku {
 #pragma clang diagnostic pop
 
     bool Process::isMissingPage(Pointer addr) const {
-        Pointer vir_index = addr / Platform::getPageSize();
-        Pointer file_offset = vir_index * 8;
-        Pointer item_bit = 0;
-        struct iovec iov{};
-        iov.iov_base = &item_bit;
-        iov.iov_len = 8;
-        preadv(pid, &iov, 1, file_offset);
-        if(item_bit & (uint64_t) 1 << 63){
-            return false;
+        if (workMode == MODE_DIRECT) {
+            auto pagesize = Platform::getPageSize();
+            unsigned char vec = 0;
+            mincore((void*)(addr & (~(pagesize - 1))), pagesize, &vec);
+            return vec != 1;
+        } else {
+            Pointer vir_index = addr / Platform::getPageSize();
+            Pointer file_offset = vir_index * 8;
+            Pointer item_bit = 0;
+            struct iovec iov{};
+            iov.iov_base = &item_bit;
+            iov.iov_len = 8;
+            preadv(pid, &iov, 1, file_offset);
+            if(item_bit & (uint64_t) 1 << 63){
+                return false;
+            }
+            return true;
         }
-        return true;
     }
 
     Process::Process(pid_t pid) : pid(pid) {
@@ -529,6 +568,10 @@ namespace Hakutaku {
             }
         }
         return RESULT_UNKNOWN_WORK_MODE;
+    }
+
+    Pointer Process::findModuleBase(const char *module_name, bool matchBss) const {
+        return Platform::findModuleBase(pid, module_name, matchBss);
     }
 
     pid_t getPidByPidOf(std::string& packageName) {

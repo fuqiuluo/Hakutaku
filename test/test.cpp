@@ -22,7 +22,7 @@ TEST(APP, GainMAPS) {
         process.read(start, &value, sizeof(int));
         printf("value: %d\n", value);
 
-        printf("/system/lib64/libnetdutils.so Base: %ld\n", Hakutaku::Platform::findModuleBase(pid, "/system/lib64/libnetdutils.so"));
+        printf("/system/lib64/libnetdutils.so Base: %ld\n", process.findModuleBase("/system/lib64/libnetdutils.so"));
     }
 }
 
