@@ -1,9 +1,12 @@
 # Hakutaku
 
+<<<<<<< HEAD
 Hakutaku名为白泽，寓意无所不知，
 
 Hakutaku is a memory modification tool based on the Android SDK 24+.
 
+=======
+>>>>>>> origin/master
 一款内存修改器/按键精灵核心程序，支持安卓SDK24以上版本。
 
 # 使用方法
