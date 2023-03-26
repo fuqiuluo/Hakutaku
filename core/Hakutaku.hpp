@@ -166,11 +166,16 @@ namespace Hakutaku {
         int read(Pointer addr, void *data, size_t len);
         int write(Pointer addr, void *data, size_t len);
 
-        // it will lead to a strong bug!
-        // template<typename T>
-        // int read(Pointer &addr, T *data);
-        // template<typename T>
-        // int write(Pointer &addr, T *data);
+        /* it will lead to a strong bug!
+        template<typename T>
+        int read(Pointer addr, T *data) {
+            return read(addr, data, sizeof(T));
+        }
+
+        template<typename T>
+        int write(Pointer addr, T *data) {
+            return write(addr, data, sizeof(T));
+        } */
     };
 
     namespace Touch {
@@ -179,6 +184,18 @@ namespace Hakutaku {
         void turnOnScreen();
 
         void touchHome();
+
+        void touchBack();
+
+        void touchMenu();
+
+        void touchPower();
+
+        void touchUp();
+
+        void touchDown();
+
+        void touch(int key);
     }
 
     namespace Utils {
@@ -239,12 +256,37 @@ namespace Hakutaku {
 }
 
 namespace Hakutaku::Touch {
+    void touch(int key) {
+        std::string cmd = "input keyevent " + std::to_string(key);
+        system(cmd.c_str());
+    }
+
     void turnOnScreen() {
-        system("input keyevent 224");
+        touch(224);
     }
 
     void touchHome() {
-        system("input keyevent 3");
+        touch(3);
+    }
+
+    void touchBack() {
+        touch(4);
+    }
+
+    void touchMenu() {
+        touch(82);
+    }
+
+    void touchPower() {
+        touch(26);
+    }
+
+    void touchUp() {
+        touch(19);
+    }
+
+    void touchDown() {
+        touch(20);
     }
 }
 
@@ -384,11 +426,11 @@ namespace Hakutaku::Platform {
 
     Pointer findModuleBase(pid_t pid, const char *module_name, bool matchBss) {
         long start_address = 0;
-        char om[64], path[256], line[1024];
+        char om[64], line[1024];
         bool LastIsSo = false;
         strcpy(om, module_name);
-        sprintf(path, "/proc/%d/maps", pid);
-        FILE *p = fopen(path, "r");
+        std::string path = "/proc/" + std::to_string(pid) + "/maps";
+        FILE *p = fopen(path.c_str(), "r");
         if (p) {
             while (fgets(line, sizeof(line), p)) {
                 if (LastIsSo) {
