@@ -145,3 +145,30 @@ int main() {
     return 0;
 }
 ```
+
+## 内存工具
+
+```c++
+int main() {
+    // 以16进制形式打印(lines * 8)字节的内存
+    Hakutaku::Utils::hexDump(process, address, lines);
+    
+    // 懒得解释这个有什么用，下面是源码
+    // system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
+    Hakutaku::Platform::reInotify();
+    
+    return 0;
+}
+```
+
+## 触摸工具（TODO）
+
+```c++
+int main() {
+    pid_t pid = Hakutaku::getPid("com.example.app");
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    // 触摸Home
+    Hakutaku::Touch::touchHome();
+    // Todo...
+}
+```

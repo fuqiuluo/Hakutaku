@@ -22,6 +22,8 @@ TEST(APP, GainMAPS) {
         Pointer start = process.findModuleBase("/system/lib64/libnetdutils.so");
         printf("/system/lib64/libnetdutils.so Base: %ld\n", start);
 
+
+
         Hakutaku::Utils::hexDump(process, start, 8);
     }
 }
