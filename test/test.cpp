@@ -9,6 +9,7 @@ TEST(APP, GainMAPS) {
     ASSERT_NE(pid, 0);
     printf("Pid: %d\n", pid);
     Hakutaku::Process process = Hakutaku::openProcess(pid);
+
     process.workMode = MODE_SYSCALL;
     Hakutaku::Maps maps = Hakutaku::Maps();
     int result = process.getMaps(maps, RANGE_ALL);
