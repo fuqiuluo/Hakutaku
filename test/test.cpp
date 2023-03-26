@@ -7,6 +7,7 @@ TEST(APP, GainMAPS) {
     std::string packageName = "bin.mt.plus";
     pid_t pid = Hakutaku::getPid(packageName);
     ASSERT_NE(pid, 0);
+    printf("Pid: %d\n", pid);
     Hakutaku::Process process = Hakutaku::openProcess(pid);
     process.workMode = MODE_SYSCALL;
     Hakutaku::Maps maps = Hakutaku::Maps();
@@ -17,12 +18,10 @@ TEST(APP, GainMAPS) {
         printf("Maps Start: %ld\n", maps.start()->start());
         printf("Maps End: %zu\n", maps.end()->end());
 
-        Pointer start = maps.start()->start();
-        int value;
-        process.read(start, &value, sizeof(int));
-        printf("value: %d\n", value);
+        Pointer start = process.findModuleBase("/system/lib64/libnetdutils.so");
+        printf("/system/lib64/libnetdutils.so Base: %ld\n", start);
 
-        printf("/system/lib64/libnetdutils.so Base: %ld\n", process.findModuleBase("/system/lib64/libnetdutils.so"));
+        Hakutaku::Utils::hexDump(process, start, 8);
     }
 }
 

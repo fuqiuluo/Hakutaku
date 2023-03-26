@@ -15,6 +15,12 @@
 #include <iconv.h>
 #include <sys/uio.h>
 
+/*
+ * 倘如你需要更多的帮助，你可以阅读
+ * 1，https://github.com/bbgsm/ue4_cheat_engine/blob/main/MTools/GameTools.cpp
+ *
+ */
+
 #define PLAT_PROC_DIR "/proc"
 
 #ifdef HAKUTAKU_64BIT
@@ -30,8 +36,8 @@ typedef long Pointer;
 #define RESULT_UNKNOWN_WORK_MODE (-4)
 
 #define RANGE_ALL 4094
-#define RANGE_BAD 2
-#define RANGE_V 4
+#define RANGE_BAD 2 //
+#define RANGE_V 4 // kgsl-3d0
 #define RANGE_CA 8
 #define RANGE_CB 16
 #define RANGE_CD 32
@@ -46,47 +52,26 @@ typedef long Pointer;
 #define MODE_MEM 1
 #define MODE_SYSCALL 2
 
+/* android api > 24
+#if defined(__arm__)
+int process_vm_readv_syscall = 376;
+int process_vm_writev_syscall = 377;
+#elif defined(__aarch64__)
+int process_vm_readv_syscall = 270;
+int process_vm_writev_syscall = 271;
+#elif defined(__i386__)
+int process_vm_readv_syscall = 347;
+int process_vm_writev_syscall = 348;
+#else
+int process_vm_readv_syscall = 310;
+int process_vm_writev_syscall = 311;
+#endif
+*/
+
 typedef int Range;
 typedef short WorkMode;
 
 namespace Hakutaku {
-    namespace Platform {
-        bool rootPermit();
-
-        inline int getPageSize();
-
-        Pointer getPageBegin(Pointer ptr);
-
-        void stopProcess(pid_t pid);
-
-        void recoverProcess(pid_t pid);
-
-        void killProcess(pid_t pid);
-
-        void reInotify() {
-            system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
-        }
-
-        std::string execCmd(const char *cmd);
-
-        // Please make a page fault judgment before execution, otherwise there will be problems!
-#if __ANDROID_API__ >= 23
-        int readBySyscall(pid_t pid, Pointer addr, void *data, size_t len);
-
-        int writeBySyscall(pid_t pid, Pointer addr, void *data, size_t len);
-#endif
-
-        int readByMem(int memFd, Pointer addr, void *data, size_t len);
-
-        int writeByMem(int memFd, Pointer addr, void *data, size_t len);
-
-        int readDirect(Pointer addr, void* data, size_t len);
-
-        int writeDirect(Pointer addr, void* data, size_t len);
-
-        Pointer findModuleBase(pid_t pid, const char *module_name, bool matchBss = false);
-    }
-
     class Page {
     private:
         Pointer _start;
@@ -180,7 +165,68 @@ namespace Hakutaku {
 
         int read(Pointer addr, void *data, size_t len);
         int write(Pointer addr, void *data, size_t len);
+
+        // it will lead to a strong bug!
+        // template<typename T>
+        // int read(Pointer &addr, T *data);
+        // template<typename T>
+        // int write(Pointer &addr, T *data);
     };
+
+    namespace Touch {
+        // Android KeyEvent模拟及KeyCode原生代码对照表
+        // https://blog.csdn.net/u010871962/article/details/120657210
+        void turnOnScreen();
+
+        void touchHome();
+    }
+
+    namespace Utils {
+        void hexDump(Process &process, Pointer addr, int lines);
+
+        void sleep_s(long long sec);
+
+        void sleep_ms(long long ms);
+
+        void sleep_us(long long us);
+    }
+
+    namespace Platform {
+        bool rootPermit();
+
+        inline int getPageSize();
+
+        Pointer getPageBegin(Pointer ptr);
+
+        void stopProcess(pid_t pid);
+
+        void recoverProcess(pid_t pid);
+
+        void killProcess(pid_t pid);
+
+        void reInotify() {
+            system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
+        }
+
+        std::string execCmd(const char *cmd);
+
+        // Please make a page fault judgment before execution, otherwise there will be problems!
+#if __ANDROID_API__ >= 23
+        int readBySyscall(pid_t pid, Pointer addr, void *data, size_t len);
+
+        int writeBySyscall(pid_t pid, Pointer addr, void *data, size_t len);
+#endif
+
+        int readByMem(int memFd, Pointer addr, void *data, size_t len);
+
+        int writeByMem(int memFd, Pointer addr, void *data, size_t len);
+
+        int readDirect(Pointer addr, void* data, size_t len);
+
+        int writeDirect(Pointer addr, void* data, size_t len);
+
+        Pointer findModuleBase(pid_t pid, const char *module_name, bool matchBss = false);
+    }
 
     pid_t getPidByPidOf(std::string& packageName);
 
@@ -190,6 +236,54 @@ namespace Hakutaku {
     pid_t getPid(std::string& packageName);
 
     inline Process openProcess(pid_t pid);
+}
+
+namespace Hakutaku::Touch {
+    void turnOnScreen() {
+        system("input keyevent 224");
+    }
+
+    void touchHome() {
+        system("input keyevent 3");
+    }
+}
+
+namespace Hakutaku::Utils {
+    void hexDump(Process &process, Pointer addr, int lines) {
+        printf("\n\t\t::::Hex Dump::::\n\n");
+        char tmp[8];
+        for(int i = 0;i < lines;i++) {
+#if defined(__LP64__)
+            printf("0x%04lx: ", addr + (i * 8));
+#else
+            printf("0x%04lx: ", addr + (i * 8));
+#endif
+            process.read(addr + (i * 8), &tmp, sizeof tmp);
+            for(char j : tmp) {
+#if defined(__LP64__)
+                printf("%02hhx ", j);
+#else
+                printf("%02x ", j);
+#endif
+            }
+            printf("  ");
+            printf("\t| %s \t|", tmp);
+            printf("\n");
+        }
+        printf("\n");
+    }
+
+    void sleep_s(long long int sec) {
+        std::this_thread::sleep_for(std::chrono::seconds(sec));
+    }
+
+    void sleep_ms(long long int ms) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    }
+
+    void sleep_us(long long int us) {
+        std::this_thread::sleep_for(std::chrono::microseconds(us));
+    }
 }
 
 // #################################################
@@ -444,9 +538,9 @@ namespace Hakutaku {
         if (range == RANGE_ALL)
             return true;
         if ((range & RANGE_A) == RANGE_A &&
-            (strstr(buff, "rw") != nullptr && strlen(buff) <= 42))
+            (strstr(buff, "rw") != nullptr && strlen(buff) < 46))
             return true;
-        if ((range & RANGE_BAD) == RANGE_BAD &&
+        if ((range & RANGE_BAD) == RANGE_BAD && // 部分修改器认为BAD内存为kgsl-3d0
             (strstr(buff, "rw") != nullptr && strstr(buff,"/system/fonts") != nullptr))
             return true;
         if ((range & RANGE_V) == RANGE_V &&
@@ -464,17 +558,17 @@ namespace Hakutaku {
         if ((range & RANGE_CH) == RANGE_CH &&
             (strstr(buff, "rw") != nullptr && strstr(buff,"[heap]") != nullptr))
             return true;
+        if ((range & RANGE_AS) == RANGE_AS &&
+            (strstr(buff, "rw") != nullptr && strstr(buff,"/dev/ashmem/") != nullptr && !strstr(buff,"dalvik")))
+            return true;
         if ((range & RANGE_JH) == RANGE_JH &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/dev/ashmem/") != nullptr))
+            (strstr(buff, "rw") != nullptr && (strstr(buff,"/dev/ashmem/") != nullptr || strstr(buff, "anon:dalvik-main") != nullptr) ))
             return true;
         if ((range & RANGE_XS) == RANGE_XS &&
             (strstr(buff, "rw") != nullptr && strstr(buff,"/system") != nullptr))
             return true;
         if ((range & RANGE_S) == RANGE_S &&
             (strstr(buff, "rw") != nullptr && strstr(buff,"[stack]") != nullptr))
-            return true;
-        if ((range & RANGE_AS) == RANGE_AS &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/dev/ashmem/") != nullptr && !strstr(buff,"dalvik")))
             return true;
         return false;
     }
