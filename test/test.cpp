@@ -12,7 +12,7 @@ TEST(APP, GainMAPS) {
 
     process.workMode = MODE_SYSCALL;
     Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process.getMaps(maps, RANGE_ALL);
+    int result = process.getMapsLite(maps, RANGE_ALL);
     ASSERT_EQ(result, 0);
     printf("Maps Size: %zu\n", maps.size());
     if (!maps.empty()) {
@@ -22,9 +22,9 @@ TEST(APP, GainMAPS) {
         Pointer start = process.findModuleBase("/system/lib64/libnetdutils.so");
         printf("/system/lib64/libnetdutils.so Base: %ld\n", start);
 
-
-
-        Hakutaku::Utils::hexDump(process, start, 8);
+        maps.clear();
+        ASSERT_EQ(process.getMaps(maps, RANGE_OTHER), 0);
+        Hakutaku::Utils::printMaps(maps);
     }
 }
 

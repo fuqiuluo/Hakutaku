@@ -35,7 +35,7 @@ typedef long Pointer;
 #define RESULT_ADDR_NWA (-3) // Address not writeable
 #define RESULT_UNKNOWN_WORK_MODE (-4)
 
-#define RANGE_ALL 4094
+#define RANGE_ALL 8190
 #define RANGE_BAD 2 //
 #define RANGE_V 4 // kgsl-3d0
 #define RANGE_CA 8
@@ -47,6 +47,7 @@ typedef long Pointer;
 #define RANGE_XS 512
 #define RANGE_S 1024
 #define RANGE_AS 2048
+#define RANGE_OTHER 4096
 
 #define MODE_DIRECT 0
 #define MODE_MEM 1
@@ -76,10 +77,14 @@ namespace Hakutaku {
     private:
         Pointer _start;
         Pointer _end;
+
         Page* _before;
         Page* _next;
-
     public:
+        char perms[5]{}; // r-x
+        unsigned long inode = 0; // inode
+        std::string name; // 段名称
+
         Page(Pointer start, Pointer end);
 
         Page(const Page &) = delete;
@@ -91,9 +96,14 @@ namespace Hakutaku {
 
         [[nodiscard]] bool inside(Pointer pointer) const;
 
+        Page *next();
+
+        Page *before();
+
         void remove();
 
         friend class Maps;
+        friend class Process;
     };
 
     class Address {
@@ -161,6 +171,7 @@ namespace Hakutaku {
 
         [[nodiscard]] bool isMissingPage(Pointer addr) const;
 
+        int getMapsLite(Maps &dstMap, Range range) const;
         int getMaps(Maps &dstMap, Range range) const;
 
         int read(Pointer addr, void *data, size_t len);
@@ -200,6 +211,8 @@ namespace Hakutaku {
 
     namespace Utils {
         void hexDump(Process &process, Pointer addr, int lines);
+
+        void printMaps(Maps& map);
 
         void sleep_s(long long sec);
 
@@ -315,6 +328,16 @@ namespace Hakutaku::Utils {
         printf("\n");
     }
 
+    void printMaps(Maps& map) {
+        printf("\n::::Maps::::\nName \t Inode \t Perms \t Name\n");
+        Page* current = map.start();
+        while (current != nullptr) {
+            printf("PAGES[0x%04lx-0x%04lx] \t%lu\t %s\t %s\n", current->start(), current->end(), current->inode,current->perms,current->name.c_str());
+            current = current->next();
+        }
+        printf("\n");
+    }
+
     void sleep_s(long long int sec) {
         std::this_thread::sleep_for(std::chrono::seconds(sec));
     }
@@ -348,21 +371,18 @@ namespace Hakutaku::Platform {
     }
 
     void stopProcess(pid_t pid) {
-        char cmd[64];
-        sprintf(cmd, "kill -STOP %d", pid);
-        std::system(cmd);
+        std::string cmd = "kill -STOP " + std::to_string(pid);
+        std::system(cmd.c_str());
     }
 
     void recoverProcess(pid_t pid) {
-        char cmd[64];
-        sprintf(cmd, "kill -CONT %d", pid);
-        std::system(cmd);
+        std::string cmd = "kill -CONT " + std::to_string(pid);
+        std::system(cmd.c_str());
     }
 
     void killProcess(pid_t pid) {
-        char cmd[64];
-        sprintf(cmd, "kill %d", pid);
-        std::system(cmd);
+        std::string cmd = "kill " + std::to_string(pid);
+        std::system(cmd.c_str());
     }
 
     std::string execCmd(const char *cmd) {
@@ -492,6 +512,14 @@ namespace Hakutaku {
         _before = nullptr;
     }
 
+    Page *Page::before() {
+        return _before;
+    }
+
+    Page *Page::next() {
+        return _next;
+    }
+
     Address::Address(Pointer addr): addr(addr) {
         currentPage = std::shared_ptr<Page>(nullptr);
     }
@@ -551,6 +579,7 @@ namespace Hakutaku {
             curr = tmp;
         }
         START = nullptr;
+        END = nullptr;
     }
 
     size_t Maps::size() {
@@ -579,51 +608,41 @@ namespace Hakutaku {
     inline bool isMatch(char *buff, Range range) {
         if (range == RANGE_ALL)
             return true;
-        if ((range & RANGE_A) == RANGE_A &&
-            (strstr(buff, "rw") != nullptr && strlen(buff) < 46))
+        if (strstr(buff, "rw") == nullptr) return false;
+        if ((range & RANGE_A) == RANGE_A &&strlen(buff) < 46) return true;
+        if ((range & RANGE_BAD) == RANGE_BAD && strstr(buff, "/system/fonts") != nullptr) // 部分修改器认为BAD内存为kgsl-3d0
             return true;
-        if ((range & RANGE_BAD) == RANGE_BAD && // 部分修改器认为BAD内存为kgsl-3d0
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/system/fonts") != nullptr))
+        if ((range & RANGE_V) == RANGE_V && strstr(buff, "/dev/kgsl-3d0") != nullptr)
             return true;
-        if ((range & RANGE_V) == RANGE_V &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/dev/kgsl-3d0") != nullptr))
+        if ((range & RANGE_CA) == RANGE_CA && strstr(buff, "[anon:libc_malloc]") != nullptr)
             return true;
-        if ((range & RANGE_CA) == RANGE_CA &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"[anon:libc_malloc]") != nullptr))
+        if ((range & RANGE_CB) == RANGE_CB && strstr(buff, "[anon:.bss]") != nullptr)
             return true;
-        if ((range & RANGE_CB) == RANGE_CB &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"[anon:.bss]") != nullptr))
+        if ((range & RANGE_CD) == RANGE_CD && strstr(buff, "/data/") != nullptr)
             return true;
-        if ((range & RANGE_CD) == RANGE_CD &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/data/") != nullptr))
+        if ((range & RANGE_CH) == RANGE_CH && strstr(buff, "[heap]") != nullptr)
             return true;
-        if ((range & RANGE_CH) == RANGE_CH &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"[heap]") != nullptr))
+        if ((range & RANGE_AS) == RANGE_AS && strstr(buff, "/dev/ashmem") != nullptr && !strstr(buff, "dalvik"))
             return true;
-        if ((range & RANGE_AS) == RANGE_AS &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/dev/ashmem/") != nullptr && !strstr(buff,"dalvik")))
+        if ((range & RANGE_JH) == RANGE_JH && (strstr(buff, "/dev/ashmem") != nullptr || strstr(buff, "anon:dalvik") != nullptr))
             return true;
-        if ((range & RANGE_JH) == RANGE_JH &&
-            (strstr(buff, "rw") != nullptr && (strstr(buff,"/dev/ashmem/") != nullptr || strstr(buff, "anon:dalvik-main") != nullptr) ))
-            return true;
-        if ((range & RANGE_XS) == RANGE_XS &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"/system") != nullptr))
-            return true;
-        if ((range & RANGE_S) == RANGE_S &&
-            (strstr(buff, "rw") != nullptr && strstr(buff,"[stack]") != nullptr))
-            return true;
+        if ((range & RANGE_XS) == RANGE_XS && strstr(buff, "/system") != nullptr) return true;
+        if ((range & RANGE_S) == RANGE_S && (strstr(buff, "[stack]") != nullptr || strstr(buff, "[stack_and_tls") != nullptr )) return true;
+
+        if ((range & RANGE_OTHER) == RANGE_OTHER && !isMatch(buff, 4094)) return true;
+
         return false;
     }
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "cert-err34-c"
-    int Process::getMaps(Maps &dstMap, Range range) const {
-        char tmp[64], buff[256];
-        sprintf(tmp, "/proc/%d/maps", pid);
-        FILE *fp = fopen(tmp, "r");
+    int Process::getMapsLite(Maps &dstMap, Range range) const {
+        std::string path = "/proc/" + std::to_string(pid) + "/maps";
+        FILE *fp = fopen(path.c_str(), "r");
         if (fp == nullptr) {
             return RESULT_OFE;
         }
+        char buff[256];
         while (!feof(fp)) {
             fgets(buff, sizeof buff, fp);
             if (isMatch(buff, range)) {
@@ -634,7 +653,32 @@ namespace Hakutaku {
             }
         }
         fclose(fp);
-        return 0;
+        return RESULT_SUCCESS;
+    }
+
+    int Process::getMaps(Maps &dstMap, Range range) const {
+        std::string path = "/proc/" + std::to_string(pid) + "/maps";
+        FILE *fp = fopen(path.c_str(), "r");
+        if (fp == nullptr) {
+            return RESULT_OFE;
+        }
+        char buff[256], tmp[512];
+        while (!feof(fp)) {
+            fgets(buff, sizeof buff, fp);
+            if (isMatch(buff, range)) {
+                Page *page = new Page(0, 0);
+                uintptr_t useless = 0;
+                sscanf(buff, "%lx-%lx %4s %lx %lx:%lx %lu %s", &page->_start, &page->_end, page->perms, &useless, &useless, &useless, &page->inode, tmp);
+                if (page->_start > 0 && page->_end > 0 && page->_start < page->_end) {
+                    page->name = std::string(tmp, strlen(tmp));
+                    dstMap.append(page);
+                } else {
+                    delete page;
+                }
+            }
+        }
+        fclose(fp);
+        return RESULT_SUCCESS;
     }
 #pragma clang diagnostic pop
 
@@ -678,9 +722,8 @@ namespace Hakutaku {
                 return Platform::readBySyscall(pid, addr, data, len);
             case MODE_MEM: {
                 if (memFd == 0) {
-                    char tmp[64];
-                    sprintf(tmp, "/proc/%d/mem", pid);
-                    memFd = open(tmp, 00000002);
+                    std::string path = "/proc/" + std::to_string(pid) + "/mem";
+                    memFd = open(path.c_str(), 00000002);
                 }
                 return Platform::readByMem(memFd, addr, data, len);
             }
@@ -696,9 +739,8 @@ namespace Hakutaku {
                 return Platform::writeBySyscall(pid, addr, data, len);
             case MODE_MEM: {
                 if (memFd == 0) {
-                    char tmp[64];
-                    sprintf(tmp, "/proc/%d/mem", pid);
-                    memFd = open(tmp, 00000002);
+                    std::string path = "/proc/" + std::to_string(pid) + "/mem";
+                    memFd = open(path.c_str(), 00000002);
                 }
                 return Platform::writeByMem(memFd, addr, data, len);
             }
@@ -711,8 +753,7 @@ namespace Hakutaku {
     }
 
     pid_t getPidByPidOf(std::string& packageName) {
-        std::string cmd = "pidof ";
-        cmd += packageName;
+        std::string cmd = "pidof " + packageName;
         auto result = Platform::execCmd(cmd.c_str());
         return (int) std::strtol(result.c_str(), nullptr, 0);
     }
@@ -723,8 +764,6 @@ namespace Hakutaku {
             return 0;
         }
         FILE* fp;
-        //char tmp[512]; too slow!
-        std::string file_path;
         dirent* pid_file;
         char cmd_line[128];
 
@@ -734,8 +773,7 @@ namespace Hakutaku {
                 strcmp(pid_file->d_name, "..") == 0)
                 continue;
 
-            //sprintf(tmp, "/proc/%s/cmdline", pid_file->d_name);
-            file_path = "/proc/";
+            std::string file_path = "/proc/";
             file_path += pid_file->d_name;
             file_path += "/cmdline";
             fp = fopen(file_path.c_str(), "r");

@@ -64,19 +64,36 @@ int main() {
     process.read(baseAddress + 0x1234, &value, sizeof(int));
     // 写入
     int write_data = 0x12345678;
-    process.read(baseAddress + 0x1234, &write_data, sizeof(int));
+    process.write(baseAddress + 0x1234, &write_data, sizeof(int));
     return 0;
 }
 ```
 
-## 获取指定内存范围Maps
+## 获取指定内存范围Maps(Lite)
 
 ```c++
 int main() {
     pid_t pid = Hakutaku::getPid("com.example.app");
     Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Maps maps_1 = process.getMaps(RANGE_ALL); // 获取全内存
-    Maps maps_2 = process.getMaps(RANGE_A | RANGE_CA | RANGE_CB); // 获取A,CA,CB内存
+    
+    Hakutaku::Maps maps = Hakutaku::Maps();
+    int result = process.getMapsLite(maps, RANGE_ALL); // 获取全内存
+    if(result == RESULT_SUCCESS) {
+        maps.clear(); //  清理map中上一次搜索的结果
+    }
+    int result = process.getMapsLite(RANGE_A | RANGE_CA | RANGE_CB); // 获取A,CA,CB内存
+    
+    
+    // Lite模式不包含以下信息
+    //
+    //char perms[5]; // r-x
+    //unsigned long inode; // inode
+    //char name[512]; // 段名称
+    //
+    
+    maps.clear(); //  清理map中上一次搜索的结果
+    process.getMaps(maps, RANGE_ALL);
+    Hakutaku::Utils::printMaps(maps); // 打印maps信息到控制台
     return 0;
 }
 ```
@@ -84,7 +101,7 @@ int main() {
 #### 当前支持的内存范围
 
 ```c++
-#define RANGE_ALL 4094 // 全内存
+#define RANGE_ALL 8190 // 全内存
 #define RANGE_BAD 2 // B内存
 #define RANGE_V 4 // V内存
 #define RANGE_CA 8 // CA内存
@@ -96,6 +113,7 @@ int main() {
 #define RANGE_XS 512 // XS内存
 #define RANGE_S 1024 // S内存
 #define RANGE_AS 2048 // AS内存
+#define RANGE_OTHER 4096
 ```
 
 ## 判断当前内存是否缺页
@@ -133,7 +151,7 @@ int main() {
 int main() {
     pid_t pid = Hakutaku::getPid("com.example.app");
     Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Maps maps = process.getMaps(RANGE_A | RANGE_CA | RANGE_CB);
+    Maps maps = process.getMapsLite(RANGE_A | RANGE_CA | RANGE_CB);
     // 搜索
     int search_data = 0x12345678;
     std::vector<Pointer> result = process.search(maps, &search_data, sizeof(int));
@@ -152,6 +170,9 @@ int main() {
 int main() {
     // 以16进制形式打印(lines * 8)字节的内存
     Hakutaku::Utils::hexDump(process, address, lines);
+    
+    // 打印maps信息到控制台
+    Hakutaku::Utils::printMaps(maps);
     
     // 懒得解释这个有什么用，下面是源码
     // system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
