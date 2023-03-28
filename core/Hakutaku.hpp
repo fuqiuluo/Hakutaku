@@ -1,5 +1,6 @@
 #include <string>
 #include <list>
+#include <forward_list>
 #include <unistd.h>
 #include <malloc.h>
 #include <cstdio>
@@ -34,6 +35,7 @@ typedef long Pointer;
 #define RESULT_ADDR_NRA (-2) // Address not readable
 #define RESULT_ADDR_NWA (-3) // Address not writeable
 #define RESULT_UNKNOWN_WORK_MODE (-4)
+#define RESULT_EMPTY_MAPS (-5)
 
 #define RANGE_ALL 8190
 #define RANGE_BAD 2 //
@@ -106,16 +108,6 @@ namespace Hakutaku {
         friend class Process;
     };
 
-    class Address {
-    public:
-        explicit Address(Pointer addr);
-
-        Address(Pointer addr, Page* page);
-
-        Pointer addr;
-        std::shared_ptr<Page> currentPage;
-    };
-
     class Maps {
     private:
         Page *START;
@@ -147,17 +139,20 @@ namespace Hakutaku {
         friend class Process;
     };
 
+    class MemoryTools;
+
     class Process {
     private:
         pid_t pid;
-        int memFd;
+        int memHandle;
+        int pagemapHandle;
 
     public:
         WorkMode workMode;
 
         explicit Process(pid_t pid);
         ~Process();
-        // no copy me, if i have a memFd -> it will be unnaturally released!
+        // no copy me, if i have a memHandle -> it will be unnaturally released!
         Process(const Process &) = default;
         Process &operator=(const Process &) = delete;
 
@@ -169,7 +164,7 @@ namespace Hakutaku {
 
         Pointer findModuleBase(const char *module_name, bool matchBss = false) const;
 
-        [[nodiscard]] bool isMissingPage(Pointer addr) const;
+        [[nodiscard]] bool isMissingPage(Pointer addr);
 
         int getMapsLite(Maps &dstMap, Range range) const;
         int getMaps(Maps &dstMap, Range range) const;
@@ -177,6 +172,7 @@ namespace Hakutaku {
         int read(Pointer addr, void *data, size_t len);
         int write(Pointer addr, void *data, size_t len);
 
+        MemoryTools getMemoryTools();
         /* it will lead to a strong bug!
         template<typename T>
         int read(Pointer addr, T *data) {
@@ -188,6 +184,104 @@ namespace Hakutaku {
             return write(addr, data, sizeof(T));
         } */
     };
+
+    class MemoryTools {
+    private:
+        Process *process;
+        std::forward_list<Pointer> result;
+
+        explicit MemoryTools(Process *process);
+
+        int search(Page *start, size_t size, std::forward_list<Pointer>& results, const std::function<bool(void*)>& matcher);
+    public:
+        /*
+         * 自动清空上一次搜索的结果，并重新获取Maps重新搜索
+         */
+        int search(void* data, size_t size, Range range = RANGE_ALL);
+
+        /*
+         * 使用上一次搜索的结果进行过滤
+         */
+        int filter(void* data, size_t size);
+
+        /*
+         * 清空上一次搜索的结果
+         */
+        void clearResult();
+
+        std::forward_list<Pointer>& getResult();
+
+        bool empty();
+
+        friend class Process;
+    };
+
+    MemoryTools::MemoryTools(Process *process): process(process) {
+    }
+
+    int MemoryTools::search(void *data, size_t size, Range range) {
+        if (!result.empty())
+            clearResult();
+        Maps map = Maps();
+        int ret = process->getMaps(map, range);
+        if (ret != RESULT_SUCCESS)
+            return ret;
+        if (map.empty())
+            return RESULT_EMPTY_MAPS;
+        return search(map.start(), size, result, [data, size](void *tmp) {
+            return memcmp(data, tmp, size) == 0;
+        });
+    }
+
+    int MemoryTools::search(Page *start, size_t size, std::forward_list<Pointer>& results, const std::function<bool(void *)>& matcher) {
+        if (start == nullptr)
+            return RESULT_ADDR_NRA;
+        char tmp[size];
+        Page* currPage = start;
+        while (currPage != nullptr) {
+            auto st = currPage->start();
+#if IGNORE_MISSING_PAGE
+            if (process->isMissingPage(st)) {
+                //printf("missing page\n");
+                goto nextPage;
+            }
+#endif
+#if SUPPORT_UNALIGNED_MEMORY
+            for (int i = 0; i < (currPage->end() - st); ++i) {
+                Pointer addr = st + i;
+                process->read(addr, tmp, size);
+                if(matcher(tmp))
+                    results.push_front(addr);
+            }
+#else
+            for (int i = 0; i < (currPage->end() - st) / size; ++i) {
+                Pointer addr = st + i * static_cast<int>(size);
+                //printf("addr: 0x%04lx\n", addr);
+                process->read(addr, tmp, size);
+                if(matcher(tmp)) {
+                    //printf("yes!\n");
+                    results.push_front(addr);
+                }
+            }
+#endif
+            nextPage:
+            currPage = currPage->next();
+        }
+
+        return RESULT_SUCCESS;
+    }
+
+    bool MemoryTools::empty() {
+        return result.empty();
+    }
+
+    std::forward_list<Pointer> &MemoryTools::getResult() {
+        return result;
+    }
+
+    void MemoryTools::clearResult() {
+        result.clear();
+    }
 
     namespace Touch {
         // Android KeyEvent模拟及KeyCode原生代码对照表
@@ -520,12 +614,6 @@ namespace Hakutaku {
         return _next;
     }
 
-    Address::Address(Pointer addr): addr(addr) {
-        currentPage = std::shared_ptr<Page>(nullptr);
-    }
-
-    Address::Address(Pointer addr, Page *page): addr(addr), currentPage(page) {}
-
     Maps::~Maps() {
         if (START != nullptr) {
             clear();
@@ -605,7 +693,7 @@ namespace Hakutaku {
         END = nullptr;
     }
 
-    inline bool isMatch(char *buff, Range range) {
+    inline bool isMatch(char *buff, Range range) { // NOLINT(misc-no-recursion)
         if (range == RANGE_ALL)
             return true;
         if (strstr(buff, "rw") == nullptr) return false;
@@ -682,20 +770,23 @@ namespace Hakutaku {
     }
 #pragma clang diagnostic pop
 
-    bool Process::isMissingPage(Pointer addr) const {
+    bool Process::isMissingPage(Pointer addr) {
         if (workMode == MODE_DIRECT) {
             auto pagesize = Platform::getPageSize();
             unsigned char vec = 0;
             mincore((void*)(addr & (~(pagesize - 1))), pagesize, &vec);
             return vec != 1;
         } else {
-            Pointer vir_index = addr / Platform::getPageSize();
-            Pointer file_offset = vir_index * 8;
+            if (pagemapHandle == 0) {
+                std::string path = "/proc/" + std::to_string(pid) + "/task/" + std::to_string(pid) + "/pagemap";
+                pagemapHandle = open(path.c_str(), O_RDONLY);
+            }
+            Pointer file_offset = (addr / Platform::getPageSize()) * 8;
             Pointer item_bit = 0;
             struct iovec iov{};
             iov.iov_base = &item_bit;
             iov.iov_len = 8;
-            preadv(pid, &iov, 1, file_offset);
+            preadv(pagemapHandle, &iov, 1, file_offset);
             if(item_bit & (uint64_t) 1 << 63){
                 return false;
             }
@@ -705,12 +796,16 @@ namespace Hakutaku {
 
     Process::Process(pid_t pid) : pid(pid) {
         workMode = MODE_SYSCALL;
-        memFd = 0;
+        memHandle = 0;
+        pagemapHandle = 0;
     }
 
     Process::~Process() {
-        if (memFd != 0) {
-            close(memFd);
+        if (memHandle != 0) {
+            close(memHandle);
+        }
+        if (pagemapHandle != 0) {
+            close(pagemapHandle);
         }
     }
 
@@ -721,11 +816,11 @@ namespace Hakutaku {
             case MODE_SYSCALL:
                 return Platform::readBySyscall(pid, addr, data, len);
             case MODE_MEM: {
-                if (memFd == 0) {
+                if (memHandle == 0) {
                     std::string path = "/proc/" + std::to_string(pid) + "/mem";
-                    memFd = open(path.c_str(), 00000002);
+                    memHandle = open(path.c_str(), 00000002);
                 }
-                return Platform::readByMem(memFd, addr, data, len);
+                return Platform::readByMem(memHandle, addr, data, len);
             }
         }
         return RESULT_UNKNOWN_WORK_MODE;
@@ -738,11 +833,11 @@ namespace Hakutaku {
             case MODE_SYSCALL:
                 return Platform::writeBySyscall(pid, addr, data, len);
             case MODE_MEM: {
-                if (memFd == 0) {
+                if (memHandle == 0) {
                     std::string path = "/proc/" + std::to_string(pid) + "/mem";
-                    memFd = open(path.c_str(), 00000002);
+                    memHandle = open(path.c_str(), 00000002);
                 }
-                return Platform::writeByMem(memFd, addr, data, len);
+                return Platform::writeByMem(memHandle, addr, data, len);
             }
         }
         return RESULT_UNKNOWN_WORK_MODE;
@@ -750,6 +845,10 @@ namespace Hakutaku {
 
     Pointer Process::findModuleBase(const char *module_name, bool matchBss) const {
         return Platform::findModuleBase(pid, module_name, matchBss);
+    }
+
+    MemoryTools Process::getMemoryTools() {
+        return MemoryTools(this);
     }
 
     pid_t getPidByPidOf(std::string& packageName) {
