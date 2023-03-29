@@ -145,23 +145,66 @@ int main() {
 }
 ```
 
-## ~~在指定内存页中进行搜索操作~~ （TODO）
+## 在内存中进行单值搜索/过滤操作
 
 ```c++
-int main() {
+// 搜索返回code
+#define RESULT_SUCCESS 0 // 成功
+#define RESULT_OFE (-1) // 打开文件错误
+#define RESULT_ADDR_NRA (-2) // 地址不可读
+#define RESULT_ADDR_NWA (-3) // 地址不可写
+#define RESULT_UNKNOWN_WORK_MODE (-4) // 未知内存读取/写入模式
+#define RESULT_EMPTY_MAPS (-5) // maps为空
+#define RESULT_NOT_FUNDAMENTAL (-6) // 非基础类型(使用无需提供size的模式搜索值时，只支持基础类型)
+#define RESULT_EMPTY_RESULT (-7) // 搜索结果为空
+// 以上代码不需要写进你自己的文件里面，只是给你看看
+
+void searchBaseValue() {
     pid_t pid = Hakutaku::getPid("com.example.app");
     Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Maps maps = process.getMapsLite(RANGE_A | RANGE_CA | RANGE_CB);
-    // 搜索
-    int search_data = 0x12345678;
-    std::vector<Pointer> result = process.search(maps, &search_data, sizeof(int));
-    // 写入
-    int write_data = 0x87654321;
-    for (Pointer pointer : result) {
-        process.write(pointer, &write_data, sizeof(int));
+    
+    // 进行基础类型搜索
+    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    int ret = searcher.search(1, RANGE_A);
+    if(ret == RESULT_SUCCESS) {
+        // 搜索成功
+        int size = searcher.getSize(); // 搜索结果数量
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
+            printf("0x%04lx\n", ptr);
+        });
+        
+        // 进行过滤
+        searcher.filter(2);
+        int size2 = searcher.getSize(); // 过滤后结果数量
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
+            printf("0x%04lx\n", ptr); // 这里将打印过滤后的结果
+        });
+    } else {
+        // 搜索失败
+        printf("搜索失败，错误码：%d\n", ret);
     }
     return 0;
 }
+
+void searchData() {
+    pid_t pid = Hakutaku::getPid("com.example.app");
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
+
+    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    const char* data = "abcdefg";
+    int ret = searcher.search((void *) data, 7, RANGE_OTHER);
+    if(ret == RESULT_SUCCESS) {
+        // 搜索成功
+        int size = searcher.getSize(); // 搜索结果数量
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
+            printf("0x%04lx\n", ptr);
+        });
+    } else {
+        // 搜索失败
+        printf("搜索失败，错误码：%d\n", ret);
+    }
+}
+
 ```
 
 ## 内存工具

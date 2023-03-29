@@ -36,6 +36,8 @@ typedef long Pointer;
 #define RESULT_ADDR_NWA (-3) // Address not writeable
 #define RESULT_UNKNOWN_WORK_MODE (-4)
 #define RESULT_EMPTY_MAPS (-5)
+#define RESULT_NOT_FUNDAMENTAL (-6)
+#define RESULT_EMPTY_RESULT (-7)
 
 #define RANGE_ALL 8190
 #define RANGE_BAD 2 //
@@ -139,7 +141,7 @@ namespace Hakutaku {
         friend class Process;
     };
 
-    class MemoryTools;
+    class MemorySearcher;
 
     class Process {
     private:
@@ -172,7 +174,7 @@ namespace Hakutaku {
         int read(Pointer addr, void *data, size_t len);
         int write(Pointer addr, void *data, size_t len);
 
-        MemoryTools getMemoryTools();
+        MemorySearcher getSearcher();
         /* it will lead to a strong bug!
         template<typename T>
         int read(Pointer addr, T *data) {
@@ -185,24 +187,33 @@ namespace Hakutaku {
         } */
     };
 
-    class MemoryTools {
+    class MemorySearcher {
     private:
         Process *process;
         std::forward_list<Pointer> result;
+        size_t resultSize;
 
-        explicit MemoryTools(Process *process);
+        explicit MemorySearcher(Process *process);
 
-        int search(Page *start, size_t size, std::forward_list<Pointer>& results, const std::function<bool(void*)>& matcher);
+        int search(Page *start, size_t size, const std::function<bool(void*)>& matcher);
+
+        int filter(size_t size, const std::function<bool(void*)>& matcher);
     public:
         /*
          * 自动清空上一次搜索的结果，并重新获取Maps重新搜索
          */
-        int search(void* data, size_t size, Range range = RANGE_ALL);
+        int search(void* data, size_t size, Range range = RANGE_ALL); // Originally search
+
+        template<typename T>
+        int search(T data, Range range = RANGE_ALL);
 
         /*
          * 使用上一次搜索的结果进行过滤
          */
         int filter(void* data, size_t size);
+
+        template<typename T>
+        int filter(T data);
 
         /*
          * 清空上一次搜索的结果
@@ -213,75 +224,10 @@ namespace Hakutaku {
 
         bool empty();
 
+        [[nodiscard]] size_t getSize() const;
+
         friend class Process;
     };
-
-    MemoryTools::MemoryTools(Process *process): process(process) {
-    }
-
-    int MemoryTools::search(void *data, size_t size, Range range) {
-        if (!result.empty())
-            clearResult();
-        Maps map = Maps();
-        int ret = process->getMaps(map, range);
-        if (ret != RESULT_SUCCESS)
-            return ret;
-        if (map.empty())
-            return RESULT_EMPTY_MAPS;
-        return search(map.start(), size, result, [data, size](void *tmp) {
-            return memcmp(data, tmp, size) == 0;
-        });
-    }
-
-    int MemoryTools::search(Page *start, size_t size, std::forward_list<Pointer>& results, const std::function<bool(void *)>& matcher) {
-        if (start == nullptr)
-            return RESULT_ADDR_NRA;
-        char tmp[size];
-        Page* currPage = start;
-        while (currPage != nullptr) {
-            auto st = currPage->start();
-#if IGNORE_MISSING_PAGE
-            if (process->isMissingPage(st)) {
-                //printf("missing page\n");
-                goto nextPage;
-            }
-#endif
-#if SUPPORT_UNALIGNED_MEMORY
-            for (int i = 0; i < (currPage->end() - st); ++i) {
-                Pointer addr = st + i;
-                process->read(addr, tmp, size);
-                if(matcher(tmp))
-                    results.push_front(addr);
-            }
-#else
-            for (int i = 0; i < (currPage->end() - st) / size; ++i) {
-                Pointer addr = st + i * static_cast<int>(size);
-                //printf("addr: 0x%04lx\n", addr);
-                process->read(addr, tmp, size);
-                if(matcher(tmp)) {
-                    //printf("yes!\n");
-                    results.push_front(addr);
-                }
-            }
-#endif
-            nextPage:
-            currPage = currPage->next();
-        }
-
-        return RESULT_SUCCESS;
-    }
-
-    bool MemoryTools::empty() {
-        return result.empty();
-    }
-
-    std::forward_list<Pointer> &MemoryTools::getResult() {
-        return result;
-    }
-
-    void MemoryTools::clearResult() {
-        result.clear();
-    }
 
     namespace Touch {
         // Android KeyEvent模拟及KeyCode原生代码对照表
@@ -847,8 +793,117 @@ namespace Hakutaku {
         return Platform::findModuleBase(pid, module_name, matchBss);
     }
 
-    MemoryTools Process::getMemoryTools() {
-        return MemoryTools(this);
+    MemorySearcher Process::getSearcher() {
+        return MemorySearcher(this);
+    }
+
+    MemorySearcher::MemorySearcher(Process *process): process(process) {
+        resultSize = 0;
+    }
+
+    int MemorySearcher::search(void *data, size_t size, Range range) {
+        if (!result.empty())
+            clearResult();
+        Maps map = Maps();
+        int ret = process->getMaps(map, range);
+        if (ret != RESULT_SUCCESS)
+            return ret;
+        if (map.empty())
+            return RESULT_EMPTY_MAPS;
+        return search(map.start(), size, [data, size](void *tmp) {
+            return memcmp(data, tmp, size) == 0;
+        });
+    }
+
+    template<typename T>
+    int MemorySearcher::search(T data, Range range) {
+        if (!std::is_fundamental<T>::value) { // 不支持输入非基础类型
+            return RESULT_NOT_FUNDAMENTAL;
+        }
+        return search(&data, sizeof(T), range);
+    }
+
+    int MemorySearcher::search(Page *start, size_t size, const std::function<bool(void *)>& matcher) {
+        if (start == nullptr)
+            return RESULT_ADDR_NRA;
+        char tmp[size];
+        Page* currPage = start;
+        while (currPage != nullptr) {
+            auto st = currPage->start();
+#if IGNORE_MISSING_PAGE
+            if (process->isMissingPage(st)) {
+                //printf("missing page\n");
+                goto nextPage;
+            }
+#endif
+#if SUPPORT_UNALIGNED_MEMORY
+            for (int i = 0; i < (currPage->end() - st); ++i) {
+                Pointer addr = st + i;
+                process->read(addr, tmp, size);
+                if(matcher(tmp))
+                    results.push_front(addr);
+            }
+#else
+            for (int i = 0; i < (currPage->end() - st) / size; ++i) {
+                Pointer addr = st + i * static_cast<int>(size);
+                //printf("addr: 0x%04lx\n", addr);
+                process->read(addr, tmp, size);
+                if(matcher(tmp)) {
+                    //printf("yes!\n");
+                    result.push_front(addr);
+                    resultSize++;
+                }
+            }
+#endif
+            nextPage:
+            currPage = currPage->next();
+        }
+
+        return RESULT_SUCCESS;
+    }
+
+    bool MemorySearcher::empty() {
+        return result.empty();
+    }
+
+    std::forward_list<Pointer> &MemorySearcher::getResult() {
+        return result;
+    }
+
+    void MemorySearcher::clearResult() {
+        result.clear();
+    }
+
+    int MemorySearcher::filter(void *data, size_t size) {
+        return filter(size, [data, size](void *tmp) {
+            return memcmp(data, tmp, size) == 0;
+        });
+    }
+
+    int MemorySearcher::filter(size_t size, const std::function<bool(void *)> &matcher) {
+        if (result.empty())
+            return RESULT_EMPTY_RESULT;
+        char tmp[size];
+        std::for_each(result.begin(), result.end(), [&](const Pointer &ptr) {
+            process->read(ptr, tmp, size);
+            if (!matcher(tmp)) {
+                result.remove(ptr);
+                resultSize--;
+            }
+        });
+        return RESULT_SUCCESS;
+    }
+
+    size_t MemorySearcher::getSize() const {
+        return resultSize;
+    }
+
+    template<typename T>
+    int MemorySearcher::filter(T data) {
+        if (!std::is_fundamental<T>::value) {
+            return RESULT_NOT_FUNDAMENTAL;
+        }
+        return filter(&data, sizeof(T));
     }
 
     pid_t getPidByPidOf(std::string& packageName) {

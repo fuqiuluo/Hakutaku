@@ -36,17 +36,12 @@ TEST(APP, GainMAPS) {
         ASSERT_EQ(process.getMaps(maps, RANGE_A), 0);
         Hakutaku::Utils::printMaps(maps);
 
-        Hakutaku::MemoryTools memoryTools = process.getMemoryTools();
-        int value = 1;
-        int ret = memoryTools.search(&value, 4, RANGE_A);
-        printf("%d, %d\n", ret, memoryTools.empty());
-        std::for_each(memoryTools.getResult().begin(), memoryTools.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
-        });
-
-        ret = memoryTools.search(&value, 4, RANGE_A);
-        printf("%d, %d\n", ret == 0, !memoryTools.empty());
-        std::for_each(memoryTools.getResult().begin(), memoryTools.getResult().end(), [&](const auto &ptr) {
+        Hakutaku::MemorySearcher searcher = process.getSearcher();
+        int ret = searcher.search(1, RANGE_A);
+        while (searcher.getSize() > 10) {
+            searcher.filter(1);
+        }
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
             printf("0x%04lx\n", ptr);
         });
     }
