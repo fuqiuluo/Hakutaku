@@ -38,6 +38,8 @@ typedef long Pointer;
 #define RESULT_EMPTY_MAPS (-5)
 #define RESULT_NOT_FUNDAMENTAL (-6)
 #define RESULT_EMPTY_RESULT (-7)
+#define RESULT_INVALID_ARGUMENT (-8)
+#define RESULT_OUT_RANGE (-9)
 
 #define RANGE_ALL 8190
 #define RANGE_BAD 2 //
@@ -196,6 +198,38 @@ namespace Hakutaku {
 
     class MemorySearcher {
     private:
+        enum ValueType: std::int8_t {
+            Byte,
+            Short,
+            Int,
+            Long,
+            Float,
+            Double,
+            UByte,
+            UShort,
+            UInt,
+            ULong,
+        };
+
+        class Value {
+        public:
+            union {
+                std::int8_t i8;
+                std::int16_t i16;
+                std::int32_t i32;
+                std::int64_t i64;
+                std::uint8_t u8;
+                std::uint16_t u16;
+                std::uint32_t u32;
+                std::uint64_t u64;
+                float f;
+                double d;
+            } value{};
+
+            ValueType type = ValueType::Int;
+        };
+
+    private:
         Process *process;
         std::forward_list<Pointer> result;
         size_t resultSize;
@@ -213,6 +247,8 @@ namespace Hakutaku {
 
         template<typename T>
         int search(T data, Range range = RANGE_ALL, int sign = SIGN_EQ);
+
+        int searchNumber(const char *expr, Range range = RANGE_ALL, int sign = SIGN_EQ);
 
         /*
          * 使用上一次搜索的结果进行过滤
@@ -929,6 +965,179 @@ namespace Hakutaku {
 
     size_t MemorySearcher::getSize() const {
         return resultSize;
+    }
+
+    int MemorySearcher::searchNumber(const char *expr, Range range, int sign) {
+        if (!result.empty())
+            clearResult();
+
+        int result_code = RESULT_SUCCESS;
+        std::vector<Value> values;
+        int step = 256;
+
+        { // Try parse value
+            size_t s = strlen(expr);
+            if (s == 0) return RESULT_SUCCESS;
+
+            //bool parsing_value = false;
+            bool is_unsigned = false;
+            std::string cache;
+            Value value = Value();
+            for (int i = 0; i < s; ++i) {
+                char tmp = expr[i];
+                switch (tmp) {
+
+                    case 'u': {
+                        is_unsigned = true;
+                        break;
+                    }
+                    case 'i': case 'I': {
+                        if (is_unsigned) {
+                            value.type = ValueType::Int;
+                        } else {
+                            value.type = ValueType::UInt;
+                        }
+                        break;
+                    }
+                    case 'c': case 'C': case 'b': case 'B': {
+                        if (is_unsigned) {
+                            value.type = ValueType::Byte;
+                        } else {
+                            value.type = ValueType::UByte;
+                        }
+                        break;
+                    }
+                    case 's': case 'S': {
+                        if (is_unsigned) {
+                            value.type = ValueType::Short;
+                        } else {
+                            value.type = ValueType::UShort;
+                        }
+                        break;
+                    }
+                    case 'l': case 'L': {
+                        if (is_unsigned) {
+                            value.type = ValueType::Long;
+                        } else {
+                            value.type = ValueType::ULong;
+                        }
+                        break;
+                    }
+                    case 'f': case 'F': {
+                        value.type = ValueType::Float;
+                        break;
+                    }
+                    case 'd': case 'D': {
+                        value.type = ValueType::Double;
+                        break;
+                    }
+                    case ';': {
+                        if (!cache.empty()) {
+                            try {
+                                switch (value.type) {
+                                    case Byte:
+                                        value.value.i8 = (std::int8_t) std::stoi(cache);
+                                        break;
+                                    case Short:
+                                        value.value.i16 = (std::int16_t) std::stoi(cache);
+                                        break;
+                                    case Int:
+                                        value.value.i32 = (std::int32_t) std::stoi(cache);
+                                        break;
+                                    case Long:
+                                        value.value.i64 = (std::int64_t) std::stol(cache);
+                                        break;
+                                    case Float:
+                                        value.value.f = std::stof(cache);
+                                        break;
+                                    case Double:
+                                        value.value.d = std::stod(cache);
+                                        break;
+                                    case UByte:
+                                        value.value.u8 = (std::uint8_t) std::stoi(cache);
+                                        break;
+                                    case UShort:
+                                        value.value.u16 = (std::uint16_t) std::stoi(cache);
+                                        break;
+                                    case UInt:
+                                        value.value.u32 = (std::uint32_t) std::stoi(cache);
+                                        break;
+                                    case ULong:
+                                        value.value.u64 = (std::uint64_t) std::stoul(cache);
+                                        break;
+                                }
+                            } catch (const std::invalid_argument& e) {
+                                return RESULT_INVALID_ARGUMENT;
+                            } catch (const std::out_of_range& e) {
+                                return RESULT_OUT_RANGE;
+                            }
+                            values.push_back(value);
+                            value = Value();
+                            cache.clear();
+                            //parsing_value = false;
+                        }
+                        break;
+                    }
+                    default: {
+                        //parsing_value = true;
+                        cache.append(expr, i, 1);
+                        break;
+                    }
+                } // switch(tmp)
+
+            } // for (int i = 0; i < s; ++i)
+            if (!cache.empty()) {
+                try {
+                    switch (value.type) {
+                        case Byte:
+                            value.value.i8 = (std::int8_t) std::stoi(cache);
+                            break;
+                        case Short:
+                            value.value.i16 = (std::int16_t) std::stoi(cache);
+                            break;
+                        case Int:
+                            value.value.i32 = (std::int32_t) std::stoi(cache);
+                            break;
+                        case Long:
+                            value.value.i64 = (std::int64_t) std::stol(cache);
+                            break;
+                        case Float:
+                            value.value.f = std::stof(cache);
+                            break;
+                        case Double:
+                            value.value.d = std::stod(cache);
+                            break;
+                        case UByte:
+                            value.value.u8 = (std::uint8_t) std::stoi(cache);
+                            break;
+                        case UShort:
+                            value.value.u16 = (std::uint16_t) std::stoi(cache);
+                            break;
+                        case UInt:
+                            value.value.u32 = (std::uint32_t) std::stoi(cache);
+                            break;
+                        case ULong:
+                            value.value.u64 = (std::uint64_t) std::stoul(cache);
+                            break;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    return RESULT_INVALID_ARGUMENT;
+                } catch (const std::out_of_range& e) {
+                    return RESULT_OUT_RANGE;
+                }
+                values.push_back(value);
+            }
+        }
+
+        printf("size: %zu\n", values.size());
+
+        Maps map = Maps();
+        process->getMapsLite(map, range);
+
+
+
+        ret:
+        return result_code;
     }
 
     template<typename T>
