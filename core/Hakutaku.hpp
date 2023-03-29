@@ -57,12 +57,12 @@ typedef long Pointer;
 #define MODE_MEM 1
 #define MODE_SYSCALL 2
 
-#define SIGN_EQ 1 // 等于
-#define SIGN_NE 2 // 不等于
-#define SIGN_GT 3 // 大于
-#define SIGN_GE 4 // 大于等于
-#define SIGN_LT 5 // 小于
-#define SIGN_LE 6 // 小于等于
+#define SIGN_EQ 0 // 等于
+#define SIGN_NE 1 // 不等于
+#define SIGN_GT 2 // 大于
+#define SIGN_GE 3 // 大于等于
+#define SIGN_LT 4 // 小于
+#define SIGN_LE 5 // 小于等于
 
 /* android api > 24
 #if defined(__arm__)

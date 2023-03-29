@@ -1,90 +1,17 @@
 # Hakutaku
 
-Hakutaku名为白泽，寓意无所不知，
+Language: [简体中文](README.md) | [English](README_en.md)
+
+![GitHub release](https://img.shields.io/github/release/fuqiuluo/Hakutaku.svg)
+![GitHub license](https://img.shields.io/github/license/fuqiuluo/HakutakU.svg)
+![GitHub repo size](https://img.shields.io/github/repo-size/fuqiuluo/Hakutaku.svg)
+![GitHub top language](https://img.shields.io/github/languages/top/fuqiuluo/Hakutaku.svg)
+
+Hakutaku名为白泽，寓意无所不知。一款内存修改器/按键精灵核心程序，支持安卓SDK24以上版本。
 
 Hakutaku is a memory modification tool based on the Android SDK 24+.
 
-一款内存修改器/按键精灵核心程序，支持安卓SDK24以上版本。
-
 # 使用方法
-
-- Process对象禁止复制，不然将导致/proc/[pid]/mem句柄提前释放，从而导致异常。
-
-### [获取Pid](/test/pidof.cpp)
-
-## 挂起/恢复/杀死进程
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    process.stop();
-    Hakutaku::Utils::sleep_ms(1000); // 暂停1秒
-    process.recover();
-    Hakutaku::Utils::sleep_ms(1000);
-    process.kill();
-    return 0;
-}
-```
-
-## 获取ModuleBaseAddress
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Pointer baseAddress = process.getModuleBaseAddress("libexample.so");
-    // Pointer baseAddress = process.getModuleBaseAddress("libexample.so", true);
-    // 如果第二个参数为true，则以[anon:.bss]段作为baseAddress
-    return 0;
-}
-```
-
-## 读取/写入内存
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Pointer baseAddress = process.getModuleBaseAddress("libexample.so");
-    // 读取
-    int value;
-    process.read(baseAddress + 0x1234, &value, sizeof(int));
-    // 写入
-    int write_data = 0x12345678;
-    process.write(baseAddress + 0x1234, &write_data, sizeof(int));
-    return 0;
-}
-```
-
-## 获取指定内存范围Maps(Lite)
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    
-    Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process.getMapsLite(maps, RANGE_ALL); // 获取全内存
-    if(result == RESULT_SUCCESS) {
-        maps.clear(); //  清理map中上一次搜索的结果
-    }
-    int result = process.getMapsLite(RANGE_A | RANGE_CA | RANGE_CB); // 获取A,CA,CB内存
-    
-    
-    // Lite模式不包含以下信息
-    //
-    //char perms[5]; // r-x
-    //unsigned long inode; // inode
-    //char name[512]; // 段名称
-    //
-    
-    maps.clear(); //  清理map中上一次搜索的结果
-    process.getMaps(maps, RANGE_ALL);
-    Hakutaku::Utils::printMaps(maps); // 打印maps信息到控制台
-    return 0;
-}
-```
 
 #### 当前支持的内存范围
 
@@ -104,37 +31,7 @@ int main() {
 #define RANGE_OTHER 4096
 ```
 
-## 判断当前内存是否缺页
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Pointer address = 0x12345678;
-    if(process.isMissingPage(address)) {
-        printf("缺页\n");
-    } else {
-        printf("不缺页\n");
-    }
-    return 0;
-}
-```
-
-## 设置当前读取/写入内存模式
-
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    process.workMode = MODE_SYSCALL; // by syscall
-    // process.workMode = MODE_MEM; // by mem file
-    // process.workMode = MODE_DIRECT; // 直接读取内存，适用于注入当前程序进进程状态
-    return 0;
-}
-```
-
-## 在内存中进行单值搜索/过滤操作
-
+#### 状态码/错误码
 ```c++
 // 搜索返回code
 #define RESULT_SUCCESS 0 // 成功
@@ -146,81 +43,40 @@ int main() {
 #define RESULT_NOT_FUNDAMENTAL (-6) // 非基础类型(使用无需提供size的模式搜索值时，只支持基础类型)
 #define RESULT_EMPTY_RESULT (-7) // 搜索结果为空
 // 以上代码不需要写进你自己的文件里面，只是给你看看
-
-void searchBaseValue() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    
-    // 进行基础类型搜索
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
-    int ret = searcher.search(1, RANGE_A);
-    if(ret == RESULT_SUCCESS) {
-        // 搜索成功
-        int size = searcher.getSize(); // 搜索结果数量
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
-        });
-        
-        // 进行过滤
-        searcher.filter(2);
-        int size2 = searcher.getSize(); // 过滤后结果数量
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr); // 这里将打印过滤后的结果
-        });
-    } else {
-        // 搜索失败
-        printf("搜索失败，错误码：%d\n", ret);
-    }
-    return 0;
-}
-
-void searchData() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
-    const char* data = "abcdefg";
-    int ret = searcher.search((void *) data, 7, RANGE_OTHER);
-    if(ret == RESULT_SUCCESS) {
-        // 搜索成功
-        int size = searcher.getSize(); // 搜索结果数量
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
-        });
-    } else {
-        // 搜索失败
-        printf("搜索失败，错误码：%d\n", ret);
-    }
-}
-
 ```
 
-## 内存工具
-
+#### 搜索值支持的Sign
 ```c++
-int main() {
-    // 以16进制形式打印(lines * 8)字节的内存
-    Hakutaku::Utils::hexDump(process, address, lines);
-    
-    // 打印maps信息到控制台
-    Hakutaku::Utils::printMaps(maps);
-    
-    // 懒得解释这个有什么用，下面是源码
-    // system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
-    Hakutaku::Platform::reInotify();
-    
-    return 0;
-}
+// 搜索值支持的Sign
+#define SIGN_EQ 0 // 等于
+#define SIGN_NE 1 // 不等于
+#define SIGN_GT 2 // 大于
+#define SIGN_GE 3 // 大于等于
+#define SIGN_LT 4 // 小于
+#define SIGN_LE 5 // 小于等于
+// 以上代码不需要写进你自己的项目里面，只是给你看看
 ```
 
-## 触摸工具（TODO）
+#### 使用注意
 
-```c++
-int main() {
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    // 触摸Home
-    Hakutaku::Touch::touchHome();
-    // Todo...
-}
-```
+- Process对象禁止复制，不然将导致/proc/[pid]/mem句柄提前释放，从而导致异常。
+
+### [获取Pid Demo](/test/pidof.cpp)
+
+### [挂起/恢复/杀死进程 Demo](/test/stop_and_recover.cpp)
+
+### [获取ModuleBaseAddress Demo](/test/get_module_base.cpp)
+
+### [读取/写入内存 Demo](/test/read_and_write.cpp)
+
+### [获取指定内存范围Maps](/test/get_maps.cpp)
+
+### [判断当前内存是否缺页](/test/is_memory_trap.cpp)
+
+### [设置当前读取/写入内存模式](/test/set_memory_mode.cpp)
+
+### [单值搜索/过滤操作](/test/search_and_filter.cpp)
+
+### [内存工具](/test/mem_tool.cpp)
+
+### 触摸工具（TODO）
