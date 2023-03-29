@@ -57,6 +57,13 @@ typedef long Pointer;
 #define MODE_MEM 1
 #define MODE_SYSCALL 2
 
+#define SIGN_EQ 1 // 等于
+#define SIGN_NE 2 // 不等于
+#define SIGN_GT 3 // 大于
+#define SIGN_GE 4 // 大于等于
+#define SIGN_LT 5 // 小于
+#define SIGN_LE 6 // 小于等于
+
 /* android api > 24
 #if defined(__arm__)
 int process_vm_readv_syscall = 376;
@@ -202,18 +209,18 @@ namespace Hakutaku {
         /*
          * 自动清空上一次搜索的结果，并重新获取Maps重新搜索
          */
-        int search(void* data, size_t size, Range range = RANGE_ALL); // Originally search
+        int search(void* data, size_t size, Range range = RANGE_ALL, int sign = SIGN_EQ); // Originally search
 
         template<typename T>
-        int search(T data, Range range = RANGE_ALL);
+        int search(T data, Range range = RANGE_ALL, int sign = SIGN_EQ);
 
         /*
          * 使用上一次搜索的结果进行过滤
          */
-        int filter(void* data, size_t size);
+        int filter(void* data, size_t size, int sign = SIGN_EQ);
 
         template<typename T>
-        int filter(T data);
+        int filter(T data, int sign = SIGN_EQ);
 
         /*
          * 清空上一次搜索的结果
@@ -801,7 +808,7 @@ namespace Hakutaku {
         resultSize = 0;
     }
 
-    int MemorySearcher::search(void *data, size_t size, Range range) {
+    int MemorySearcher::search(void *data, size_t size, Range range, int sign) {
         if (!result.empty())
             clearResult();
         Maps map = Maps();
@@ -810,17 +817,30 @@ namespace Hakutaku {
             return ret;
         if (map.empty())
             return RESULT_EMPTY_MAPS;
-        return search(map.start(), size, [data, size](void *tmp) {
+        return search(map.start(), size, [&](void *tmp) {
+            if (sign == SIGN_EQ) {
+                return memcmp(data, tmp, size) == 0;
+            } else if (sign == SIGN_NE) {
+                return memcmp(data, tmp, size) != 0;
+            } else if (sign == SIGN_GT) {
+                return memcmp(data, tmp, size) > 0;
+            } else if (sign == SIGN_GE) {
+                return memcmp(data, tmp, size) >= 0;
+            } else if (sign == SIGN_LT) {
+                return memcmp(data, tmp, size) < 0;
+            } else if (sign == SIGN_LE) {
+                return memcmp(data, tmp, size) <= 0;
+            }
             return memcmp(data, tmp, size) == 0;
         });
     }
 
     template<typename T>
-    int MemorySearcher::search(T data, Range range) {
+    int MemorySearcher::search(T data, Range range, int sign) {
         if (!std::is_fundamental<T>::value) { // 不支持输入非基础类型
             return RESULT_NOT_FUNDAMENTAL;
         }
-        return search(&data, sizeof(T), range);
+        return search(&data, sizeof(T), range, sign);
     }
 
     int MemorySearcher::search(Page *start, size_t size, const std::function<bool(void *)>& matcher) {
@@ -874,8 +894,21 @@ namespace Hakutaku {
         result.clear();
     }
 
-    int MemorySearcher::filter(void *data, size_t size) {
-        return filter(size, [data, size](void *tmp) {
+    int MemorySearcher::filter(void *data, size_t size, int sign) {
+        return filter(size, [&](void *tmp) {
+            if (sign == SIGN_EQ) {
+                return memcmp(data, tmp, size) == 0;
+            } else if (sign == SIGN_NE) {
+                return memcmp(data, tmp, size) != 0;
+            } else if (sign == SIGN_GT) {
+                return memcmp(data, tmp, size) > 0;
+            } else if (sign == SIGN_GE) {
+                return memcmp(data, tmp, size) >= 0;
+            } else if (sign == SIGN_LT) {
+                return memcmp(data, tmp, size) < 0;
+            } else if (sign == SIGN_LE) {
+                return memcmp(data, tmp, size) <= 0;
+            }
             return memcmp(data, tmp, size) == 0;
         });
     }
@@ -899,11 +932,11 @@ namespace Hakutaku {
     }
 
     template<typename T>
-    int MemorySearcher::filter(T data) {
+    int MemorySearcher::filter(T data, int sign) {
         if (!std::is_fundamental<T>::value) {
             return RESULT_NOT_FUNDAMENTAL;
         }
-        return filter(&data, sizeof(T));
+        return filter(&data, sizeof(T), sign);
     }
 
     pid_t getPidByPidOf(std::string& packageName) {

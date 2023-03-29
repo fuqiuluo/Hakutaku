@@ -10,19 +10,7 @@ Hakutaku is a memory modification tool based on the Android SDK 24+.
 
 - Process对象禁止复制，不然将导致/proc/[pid]/mem句柄提前释放，从而导致异常。
 
-## 获取Pid
-
-```c++
-#include "core/Hakutaku.hpp"
-
-int main() {
-    // 通过遍历/proc
-    pid_t pid = Hakutaku::getPid("com.example.app");
-    // 通过执行pidof
-    // pid_t pid = Hakutaku::getPidByPidOf("com.example.app");
-    return 0;
-}
-```
+### [获取Pid](/test/pidof.cpp)
 
 ## 挂起/恢复/杀死进程
 
