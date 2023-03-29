@@ -1,7 +1,5 @@
 # Hakutaku
 
-<div style="text-align: center;"> <img src="images/top_mini.png" alt="Logo"> </div>
-
 Language: [简体中文](README.md) | [English](README_en.md)
 
 ![GitHub release](https://img.shields.io/github/release/fuqiuluo/Hakutaku.svg)
