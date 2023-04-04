@@ -37,7 +37,7 @@ TEST(APP, GainMAPS) {
         Hakutaku::Utils::printMaps(maps);
 
         Hakutaku::MemorySearcher searcher = process.getSearcher();
-        searcher.searchNumber("1D;2F;", RANGE_A);
+        searcher.searchNumber("1F;2I;4.668D;2B::2588", RANGE_A);
         return;
         while (searcher.getSize() > 10) {
             searcher.filter(1);

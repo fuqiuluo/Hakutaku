@@ -209,6 +209,7 @@ namespace Hakutaku {
             UShort,
             UInt,
             ULong,
+            Unknown
         };
 
         class Value {
@@ -973,170 +974,223 @@ namespace Hakutaku {
 
         int result_code = RESULT_SUCCESS;
         std::vector<Value> values;
-        int step = 256;
+        unsigned int step = 256;
 
-        { // Try parse value
+        {
+            std::string cache; // 缓冲区
+            ValueType cache_type = Unknown;
+            bool is_unsigned = false; // 无符号
+            bool is_inputting_value = false; // 正在输入值
+            bool is_determined_type = false; // 已决断类型
+            bool is_inputting_step = false; // 正在输入步长
+
+            // 类型决断
+            auto determineType = [](bool is_unsigned, char type) {
+                //printf("%d, %d || ", type, 'F');
+                switch (type) {
+                    case 'i':
+                    case 'I': {
+                        if (is_unsigned) {
+                            return ValueType::UInt;
+                        } else {
+                            return ValueType::Int;
+                        }
+                    }
+                    case 'c':
+                    case 'C':
+                    case 'b':
+                    case 'B': {
+                        if (is_unsigned) {
+                            return ValueType::UByte;
+                        } else {
+                            return ValueType::Byte;
+                        }
+                    }
+                    case 's':
+                    case 'S': {
+                        if (is_unsigned) {
+                            return ValueType::UShort;
+                        } else {
+                            return ValueType::Short;
+                        }
+                    }
+                    case 'l':
+                    case 'L': {
+                        if (is_unsigned) {
+                            return ValueType::ULong;
+                        } else {
+                            return ValueType::Long;
+                        }
+                    }
+                    case 'f':
+                    case 'F': {
+                        //printf("Floart\n");
+                        return ValueType::Float;
+                    }
+                    case 'd':
+                    case 'D': {
+                        return ValueType::Double;
+                    }
+                    default: {
+                        return ValueType::Unknown;
+                    }
+                }
+            };
+            // 数据解析
+            auto parseValue = [&](bool reload = false) {
+                Value value;
+                switch (cache_type) {
+                    case Byte:
+                        value.value.i8 = (std::int8_t) std::stoi(cache);
+                        break;
+                    case Short:
+                        value.value.i16 = (std::int16_t) std::stoi(cache);
+                        break;
+                    case Int:
+                        value.value.i32 = (std::int32_t) std::stoi(cache);
+                        break;
+                    case Long:
+                        value.value.i64 = (std::int64_t) std::stol(cache);
+                        break;
+                    case Float:
+                        value.value.f = std::stof(cache);
+                        break;
+                    case Double:
+                        value.value.d = std::stod(cache);
+                        break;
+                    case UByte:
+                        value.value.u8 = (std::uint8_t) std::stoi(cache);
+                        break;
+                    case UShort:
+                        value.value.u16 = (std::uint16_t) std::stoi(cache);
+                        break;
+                    case UInt:
+                        value.value.u32 = (std::uint32_t) std::stoi(cache);
+                        break;
+                    case ULong:
+                        value.value.u64 = (std::uint64_t) std::stoul(cache);
+                        break;
+                    case Unknown:
+                        throw std::runtime_error("This type is prohibited from being recognized.");
+                }
+                value.type = cache_type;
+                values.push_back(value);
+                cache.clear();
+                if (reload) {
+                    // 清空标记
+                    is_unsigned = false;
+                    is_determined_type = false;
+                    is_inputting_value = false;
+                    cache_type = Unknown;
+                }
+            };
+            // 期盼截断
+            auto expectNext = [&expr](int& index, char expect) {
+                index++;
+                char curr = expr[index];
+                return expect == curr;
+            };
+
             size_t s = strlen(expr);
             if (s == 0) return RESULT_SUCCESS;
 
-            //bool parsing_value = false;
-            bool is_unsigned = false;
-            std::string cache;
-            Value value = Value();
+            // right:
+            // 1F
+            // 1FF (equals 1F)
+            // 1FI (equals 1I)
+            // 1f;2F
+            // 1F;;2F
+            // 1f;2F::3
+            // 1f;2F;::3
+
+            // error:
+            // 1F2F
+            // 1F;2F;::4D
+
             for (int i = 0; i < s; ++i) {
                 char tmp = expr[i];
-                switch (tmp) {
-
-                    case 'u': {
-                        is_unsigned = true;
-                        break;
-                    }
-                    case 'i': case 'I': {
-                        if (is_unsigned) {
-                            value.type = ValueType::Int;
+                ValueType tryDetermineType = determineType(is_unsigned, tmp);
+                if (tryDetermineType == Unknown) {
+                    if (is_determined_type && tmp != ';') {
+                        if (tmp == ':' && expectNext(i, ':')) {
+                            parseValue(true);
+                            is_inputting_step = true;
                         } else {
-                            value.type = ValueType::UInt;
+                            // 搜索规范，一旦决断了类型必须以';'结尾，除非声明步长
+                            throw std::runtime_error("Expected ';' ended up as a value but not found.");
                         }
-                        break;
-                    }
-                    case 'c': case 'C': case 'b': case 'B': {
-                        if (is_unsigned) {
-                            value.type = ValueType::Byte;
-                        } else {
-                            value.type = ValueType::UByte;
-                        }
-                        break;
-                    }
-                    case 's': case 'S': {
-                        if (is_unsigned) {
-                            value.type = ValueType::Short;
-                        } else {
-                            value.type = ValueType::UShort;
-                        }
-                        break;
-                    }
-                    case 'l': case 'L': {
-                        if (is_unsigned) {
-                            value.type = ValueType::Long;
-                        } else {
-                            value.type = ValueType::ULong;
-                        }
-                        break;
-                    }
-                    case 'f': case 'F': {
-                        value.type = ValueType::Float;
-                        break;
-                    }
-                    case 'd': case 'D': {
-                        value.type = ValueType::Double;
-                        break;
-                    }
-                    case ';': {
-                        if (!cache.empty()) {
-                            try {
-                                switch (value.type) {
-                                    case Byte:
-                                        value.value.i8 = (std::int8_t) std::stoi(cache);
-                                        break;
-                                    case Short:
-                                        value.value.i16 = (std::int16_t) std::stoi(cache);
-                                        break;
-                                    case Int:
-                                        value.value.i32 = (std::int32_t) std::stoi(cache);
-                                        break;
-                                    case Long:
-                                        value.value.i64 = (std::int64_t) std::stol(cache);
-                                        break;
-                                    case Float:
-                                        value.value.f = std::stof(cache);
-                                        break;
-                                    case Double:
-                                        value.value.d = std::stod(cache);
-                                        break;
-                                    case UByte:
-                                        value.value.u8 = (std::uint8_t) std::stoi(cache);
-                                        break;
-                                    case UShort:
-                                        value.value.u16 = (std::uint16_t) std::stoi(cache);
-                                        break;
-                                    case UInt:
-                                        value.value.u32 = (std::uint32_t) std::stoi(cache);
-                                        break;
-                                    case ULong:
-                                        value.value.u64 = (std::uint64_t) std::stoul(cache);
-                                        break;
-                                }
-                            } catch (const std::invalid_argument& e) {
-                                return RESULT_INVALID_ARGUMENT;
-                            } catch (const std::out_of_range& e) {
-                                return RESULT_OUT_RANGE;
-                            }
-                            values.push_back(value);
-                            value = Value();
-                            cache.clear();
-                            //parsing_value = false;
-                        }
-                        break;
-                    }
-                    default: {
-                        //parsing_value = true;
+                    } else if (tmp == 'u' || tmp == 'U') {
+                        is_unsigned = true; // 决断为无符号数字
+                    } else if(tmp == ':' && expectNext(i, ':')) {
+                        is_inputting_step = true;
+                    } else if (tmp == ';' && !cache.empty()) {
+                        if (is_inputting_step)
+                            throw std::runtime_error("Input ';' not expected when entering step.");
+                        parseValue(true);
+                    } else {
+                        if (!is_inputting_step)
+                            is_inputting_value = true;
                         cache.append(expr, i, 1);
-                        break;
                     }
-                } // switch(tmp)
-
-            } // for (int i = 0; i < s; ++i)
-            if (!cache.empty()) {
-                try {
-                    switch (value.type) {
-                        case Byte:
-                            value.value.i8 = (std::int8_t) std::stoi(cache);
-                            break;
-                        case Short:
-                            value.value.i16 = (std::int16_t) std::stoi(cache);
-                            break;
-                        case Int:
-                            value.value.i32 = (std::int32_t) std::stoi(cache);
-                            break;
-                        case Long:
-                            value.value.i64 = (std::int64_t) std::stol(cache);
-                            break;
-                        case Float:
-                            value.value.f = std::stof(cache);
-                            break;
-                        case Double:
-                            value.value.d = std::stod(cache);
-                            break;
-                        case UByte:
-                            value.value.u8 = (std::uint8_t) std::stoi(cache);
-                            break;
-                        case UShort:
-                            value.value.u16 = (std::uint16_t) std::stoi(cache);
-                            break;
-                        case UInt:
-                            value.value.u32 = (std::uint32_t) std::stoi(cache);
-                            break;
-                        case ULong:
-                            value.value.u64 = (std::uint64_t) std::stoul(cache);
-                            break;
-                    }
-                } catch (const std::invalid_argument& e) {
-                    return RESULT_INVALID_ARGUMENT;
-                } catch (const std::out_of_range& e) {
-                    return RESULT_OUT_RANGE;
+                    continue;
+                } else {
+                    if (is_inputting_step)
+                        throw std::runtime_error("Declared type not expected on input step.");
+                    cache_type = tryDetermineType;
+                    is_determined_type = true;
                 }
-                values.push_back(value);
+            } // for (int i = 0; i < s; ++i)
+            if (!cache.empty()) { // 处理尾值
+                if (is_inputting_value) {
+                    parseValue();
+                } else if (is_inputting_step) {
+                    step = (std::uint32_t) std::stoul(cache);
+                }
             }
         }
 
-        printf("size: %zu\n", values.size());
+        printf("值数量: %zu, 步长: %d ====> \n", values.size(), step);
+        std::for_each(values.begin(), values.end(), [&](const Value &item) {
+            switch (item.type) {
+                case Byte:
+                    printf("类型：Byte, 值: %d\n", item.value.i8);
+                    break;
+                case Short:
+                    printf("类型：Short, 值: %d\n", item.value.i16);
+                    break;
+                case Int:
+                    printf("类型：Int, 值: %d\n", item.value.i32);
+                    break;
+                case Long:
+                    printf("类型：Long, 值: %ld\n", item.value.i64);
+                    break;
+                case Float:
+                    printf("类型：Float, 值: %f\n", item.value.f);
+                    break;
+                case Double:
+                    printf("类型：Double, 值: %lf\n", item.value.d);
+                    break;
+                case UByte:
+                    printf("类型：UByte, 值: %u\n", item.value.u8);
+                    break;
+                case UShort:
+                    printf("类型：UShort, 值: %u\n", item.value.u16);
+                    break;
+                case UInt:
+                    printf("类型：UInt, 值: %u\n", item.value.u32);
+                    break;
+                case ULong:
+                    printf("类型：ULong, 值: %lu\n", item.value.u64);
+                    break;
+                case Unknown:
+                    throw std::runtime_error("This type is prohibited from being recognized.");
+                    break;
+            }
+        });
 
-        Maps map = Maps();
-        process->getMapsLite(map, range);
+        //Maps map = Maps();
+        //process->getMapsLite(map, range);
 
-
-
-        ret:
         return result_code;
     }
 
