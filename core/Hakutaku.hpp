@@ -887,7 +887,7 @@ namespace Hakutaku {
         Page* currPage = start;
         while (currPage != nullptr) {
             auto st = currPage->start();
-#if IGNORE_MISSING_PAGE
+#if !IGNORE_MISSING_PAGE
             if (process->isMissingPage(st)) {
                 //printf("missing page\n");
                 goto nextPage;
@@ -986,7 +986,6 @@ namespace Hakutaku {
 
             // 类型决断
             auto determineType = [](bool is_unsigned, char type) {
-                //printf("%d, %d || ", type, 'F');
                 switch (type) {
                     case 'i':
                     case 'I': {
@@ -1046,9 +1045,16 @@ namespace Hakutaku {
                     case Short:
                         value.value.i16 = (std::int16_t) std::stoi(cache);
                         break;
-                    case Int:
-                        value.value.i32 = (std::int32_t) std::stoi(cache);
+                    case Int: {
+                        auto temp = std::stol(cache);
+                        if (temp > 0x7fffffff) {
+                            value.value.u32 = temp;
+                            cache_type = UInt;
+                        } else {
+                            value.value.i32 = (std::int32_t) temp;
+                        }
                         break;
+                    }
                     case Long:
                         value.value.i64 = (std::int64_t) std::stol(cache);
                         break;
@@ -1149,47 +1155,141 @@ namespace Hakutaku {
             }
         }
 
-        printf("值数量: %zu, 步长: %d ====> \n", values.size(), step);
-        std::for_each(values.begin(), values.end(), [&](const Value &item) {
-            switch (item.type) {
-                case Byte:
-                    printf("类型：Byte, 值: %d\n", item.value.i8);
-                    break;
-                case Short:
-                    printf("类型：Short, 值: %d\n", item.value.i16);
-                    break;
-                case Int:
-                    printf("类型：Int, 值: %d\n", item.value.i32);
-                    break;
-                case Long:
-                    printf("类型：Long, 值: %ld\n", item.value.i64);
-                    break;
-                case Float:
-                    printf("类型：Float, 值: %f\n", item.value.f);
-                    break;
-                case Double:
-                    printf("类型：Double, 值: %lf\n", item.value.d);
-                    break;
-                case UByte:
-                    printf("类型：UByte, 值: %u\n", item.value.u8);
-                    break;
-                case UShort:
-                    printf("类型：UShort, 值: %u\n", item.value.u16);
-                    break;
-                case UInt:
-                    printf("类型：UInt, 值: %u\n", item.value.u32);
-                    break;
-                case ULong:
-                    printf("类型：ULong, 值: %lu\n", item.value.u64);
-                    break;
-                case Unknown:
-                    throw std::runtime_error("This type is prohibited from being recognized.");
-                    break;
-            }
-        });
+        Maps map = Maps();
+        process->getMapsLite(map, range);
+        if (map.empty())
+            return RESULT_EMPTY_MAPS;
 
-        //Maps map = Maps();
-        //process->getMapsLite(map, range);
+        // 决断值长度
+        auto determineSize = [](ValueType type) {
+            switch (type) {
+                case Byte:
+                    return sizeof(char);
+                case Short:
+                    return sizeof(short);
+                case Int:
+                    return sizeof(int);
+                case Long:
+                    return sizeof(long);
+                case Float:
+                    return sizeof(float);
+                case Double:
+                    return sizeof(double);
+                case UByte:
+                    return sizeof(unsigned char);
+                case UShort:
+                    return sizeof(unsigned short);
+                case UInt:
+                    return sizeof(unsigned int);
+                case ULong:
+                    return sizeof(unsigned long);
+                default:
+                    throw std::runtime_error("Unknown type.");
+            }
+        };
+
+        Page *currPage = map.start();
+        auto tv = values.begin();
+        size_t valueSize = determineSize(tv->type);
+        char temp[valueSize];
+
+        // 决断周围特征值
+        std::function<bool(std::vector<Value, std::allocator<Value>>::iterator iter, Pointer currPtr, Page* currPage, std::forward_list<Pointer>&)> around = nullptr;
+        around = [&around, &values, &determineSize, &step, this]
+                (std::vector<Value, std::allocator<Value>>::iterator iter, Pointer currPtr, Page* currPage, std::forward_list<Pointer>& rs) {
+            auto next = iter + 1;
+            // printf("%04lx, %04lx, %04lx, %04lx\n", (Pointer) next.base(), (Pointer) iter.base(), (Pointer) values.cend().base(), (Pointer) values.end().base());
+            if (next == values.cend()) {
+                //printf("out\n");
+                return true;
+            }
+            auto size = determineSize(next->type);
+            char temp[size];
+            int curStep = 0;
+            //printf("curPage: %04lx\n", (Pointer) currPage);
+            while (currPage != nullptr) {
+#if !IGNORE_MISSING_PAGE
+                if (process->isMissingPage(currPage->start())) {
+                    goto nextPage2;
+                }
+#endif
+#if SUPPORT_UNALIGNED_MEMORY
+                for (int i = 0; i < (currPage->end() - startPtr); ++i) {
+                    if (curStep > step)
+                        return false;
+                    Pointer addr = startPtr + i;
+                    process->read(addr, tmp, valueSize);
+                    if(memcmp(temp, &next->value.u8, size) == 0) {
+                        rs.push_front(addr);
+                        return around(next, addr, currPage, rs);
+                    }
+                    curStep++;
+                }
+#else
+                for (int i = 0; i < (currPage->end() - currPtr) / size; ++i) {
+                    if (curStep > step) {
+                        //printf("// 超出步长\n");
+                        return false;
+                    }
+                    Pointer addr = currPtr + i * static_cast<int>(size);
+                    process->read(addr, temp, size);
+                    if (memcmp(temp, &next->value.u8, size) == 0) {
+                        //printf("找到次值\n");
+                        rs.push_front(addr);
+                        return around(next, addr, currPage, rs);
+                    }
+                    curStep++;
+                }
+#endif
+                nextPage2:
+                currPage = currPage->next();
+            }
+            //printf("出去了\n");
+            return false;
+        };
+
+        while (currPage != nullptr) {
+            auto startPtr = currPage->start();
+#if !IGNORE_MISSING_PAGE
+            if (process->isMissingPage(startPtr)) {
+                //printf("missing page\n");
+                goto nextPage;
+            }
+#endif
+#if SUPPORT_UNALIGNED_MEMORY
+            for (int i = 0; i < (currPage->end() - startPtr); ++i) {
+                Pointer addr = startPtr + i;
+                process->read(addr, tmp, valueSize);
+                if(matcher(tmp))
+                    results.push_front(addr);
+            }
+#else
+            for (int i = 0; i < (currPage->end() - startPtr) / valueSize; ++i) {
+                Pointer addr = startPtr + i * static_cast<int>(valueSize);
+                process->read(addr, temp, valueSize);
+                int cmp = memcmp(temp, &tv->value.u8, valueSize);
+                if ((sign == SIGN_EQ && cmp == 0) ||
+                (sign == SIGN_NE && cmp != 0) ||
+                (sign == SIGN_GT && cmp > 0) ||
+                (sign == SIGN_LT && cmp < 0) ||
+                (sign == SIGN_GT && cmp >= 0) ||
+                (sign == SIGN_LT && cmp <= 0)) {
+                    //printf("找到首值！\n");
+                    std::forward_list<Pointer> rs;
+                    rs.push_front(addr);
+                    if (around(tv, addr, currPage, rs)) {
+                        //printf("yes!\n");
+                        result.merge(rs);
+                        resultSize += values.size();
+                    }
+                } else {
+                    continue;
+                }
+            }
+#endif
+            nextPage:
+            currPage = currPage->next();
+        }
 
         return result_code;
     }

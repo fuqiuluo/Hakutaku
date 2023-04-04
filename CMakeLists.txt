@@ -9,7 +9,7 @@ set(BUILD_UNIT_TEST ON)
 
 # PLATFORM SETTING
 set(HAKUTAKU_64BIT ON) # 64bit platform
-set(IGNORE_MISSING_PAGE ON) # ignore missing page
+set(IGNORE_MISSING_PAGE OFF) # ignore missing page
 set(SUPPORT_UNALIGNED_MEMORY OFF) # support unaligned memory access
 
 if(HAKUTAKU_64BIT)

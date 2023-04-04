@@ -3,16 +3,6 @@
 
 #include <iostream>
 
-TEST(MEM, mem) {
-    char* tmp = new char[64]{};
-    memset(tmp, 1, 64);
-    char* a = tmp + 1;
-    printf("v: %d\n", *a);
-    int* b = reinterpret_cast<int *>(a);
-    printf("v: %d\n", *b);
-    delete[] tmp;
-}
-
 TEST(APP, GainMAPS) {
     std::string packageName = "bin.mt.plus";
     pid_t pid = Hakutaku::getPid(packageName);
@@ -37,11 +27,12 @@ TEST(APP, GainMAPS) {
         Hakutaku::Utils::printMaps(maps);
 
         Hakutaku::MemorySearcher searcher = process.getSearcher();
-        searcher.searchNumber("1F;2I;4.668D;2B::2588", RANGE_A);
-        return;
-        while (searcher.getSize() > 10) {
+        searcher.searchNumber("1I;233I;1I", RANGE_A);
+        while (searcher.getSize() > 20) {
+            printf("ResultSize: %zu\n", searcher.getSize());
             searcher.filter(1);
         }
+        printf("ResultSize: %zu\n", searcher.getSize());
         std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
             printf("0x%04lx\n", ptr);
         });
