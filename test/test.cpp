@@ -27,14 +27,19 @@ TEST(APP, GainMAPS) {
         Hakutaku::Utils::printMaps(maps);
 
         Hakutaku::MemorySearcher searcher = process.getSearcher();
-        searcher.searchNumber("1I;233I;1I", RANGE_A);
-        while (searcher.getSize() > 20) {
-            printf("ResultSize: %zu\n", searcher.getSize());
+        searcher.searchNumber("80~90D;99~100D", RANGE_A);
+        while (searcher.size() > 20) {
+            printf("ResultSize: %zu\n", searcher.size());
             searcher.filter(1);
         }
-        printf("ResultSize: %zu\n", searcher.getSize());
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
+        printf("ResultSize: %zu\n", searcher.size());
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                int value = 0;
+                process.read(ptr, &value, sizeof(int));
+                printf("0x%04lx: %d\n", ptr, value);
+            });
         });
     }
 }

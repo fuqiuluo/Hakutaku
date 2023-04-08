@@ -11,9 +11,13 @@ TEST(MemoryOperate, OnlySearchBaseValue) {
     int ret = searcher.search(1, RANGE_A);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
-        int size = searcher.getSize(); // number of search results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
+        int size = searcher.size(); // number of search results
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                printf("0x%04lx\n", ptr);
+            });
+            printf("\n");
         });
     } else {
         // search failed
@@ -31,16 +35,24 @@ TEST(MemoryOperate, SearchAndFilterBaseValue) {
     int ret = searcher.search(1, RANGE_A);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
-        int size = searcher.getSize(); // number of search results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
+        int size = searcher.size(); // number of search results
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                printf("0x%04lx\n", ptr);
+            });
+            printf("\n");
         });
 
         // to filter
         searcher.filter(2);
-        int filter_size = searcher.getSize(); // number of filtered results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr); // Here will print the filtered result
+        int filter_size = searcher.size(); // number of filtered results
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                printf("0x%04lx\n", ptr);
+            });
+            printf("\n");
         });
     } else {
         // search failed
@@ -59,9 +71,13 @@ TEST(MemoryOperate, OnlySearchData) {
     int ret = searcher.search((void *) data, 7, RANGE_OTHER);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
-        int size = searcher.getSize(); // number of search results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
+        int size = searcher.size(); // number of search results
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                printf("0x%04lx\n", ptr);
+            });
+            printf("\n");
         });
     } else {
         // search failed
@@ -83,9 +99,13 @@ TEST(MemoryOperate, OnlySearchBaseValueWithSign) {
 
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
-        int size = searcher.getSize(); // number of search results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const auto &ptr) {
-            printf("0x%04lx\n", ptr);
+        int size = searcher.size(); // number of search results
+        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
+            printf("==========> Group[%zu]\n", ptrSet.size());
+            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
+                printf("0x%04lx\n", ptr);
+            });
+            printf("\n");
         });
     } else {
         // search failed
