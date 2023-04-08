@@ -10,6 +10,8 @@ TEST(APP, GainMAPS) {
     printf("Pid: %d\n", pid);
     Hakutaku::Process process = Hakutaku::openProcess(pid);
 
+    printf("Bit64: %d\n", process.is64Bit());
+
     process.workMode = MODE_SYSCALL;
     Hakutaku::Maps maps = Hakutaku::Maps();
     int result = process.getMapsLite(maps, RANGE_ALL);
@@ -27,12 +29,12 @@ TEST(APP, GainMAPS) {
         Hakutaku::Utils::printMaps(maps);
 
         Hakutaku::MemorySearcher searcher = process.getSearcher();
-        searcher.searchNumber("80~90D;99~100D", RANGE_A);
-        while (searcher.size() > 20) {
-            printf("ResultSize: %zu\n", searcher.size());
-            searcher.filter(1);
-        }
+        searcher.searchNumber("10086D;0D;1D", RANGE_A);
         printf("ResultSize: %zu\n", searcher.size());
+
+        searcher.filterNumber("10086D;1D;");
+        printf("ResultSize: %zu\n", searcher.size());
+
         std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
             printf("==========> Group[%zu]\n", ptrSet.size());
             std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {

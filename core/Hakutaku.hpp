@@ -144,6 +144,8 @@ namespace Hakutaku {
         Process(const Process &) = default;
         Process &operator=(const Process &) = delete;
 
+        [[nodiscard]] bool is64Bit() const;
+
         void stop() const;
 
         void recover() const;
@@ -213,6 +215,7 @@ namespace Hakutaku {
         public:
             Value min;
             Value max;
+            bool isOutRange = false;
         };
 
     private:
@@ -220,6 +223,17 @@ namespace Hakutaku {
         std::vector<std::set<Pointer>> result;
 
         explicit MemorySearcher(Process *process);
+
+        class Lexer {
+        public:
+            static int llex(std::vector<std::any> &values, unsigned int& group_size, const char* expr);
+
+            static ValueType getRealType(std::vector<std::any, std::allocator<std::any>>::iterator value);
+
+            static size_t determineSize(ValueType type);
+
+            static bool isRange(std::vector<std::any, std::allocator<std::any>>::iterator value);
+        };
     public:
         int search(size_t size, Range range, const std::function<bool(void*)>& matcher);
 
@@ -234,6 +248,8 @@ namespace Hakutaku {
         int search(T data, Range range = RANGE_ALL);
 
         int searchNumber(const char *expr, Range range = RANGE_ALL);
+
+        int filterNumber(const char *value_iter);
 
         /*
          * 使用上一次搜索的结果进行过滤
@@ -501,12 +517,8 @@ namespace Hakutaku::Platform {
     }
 
     int readBySyscall(pid_t pid, Pointer addr, void *data, size_t len) {
-        static iovec local;
-        static iovec remote;
-        local.iov_base = data;
-        local.iov_len = len;
-        remote.iov_base = (void*) addr;
-        remote.iov_len = len;
+        iovec local{ data, len };
+        iovec remote{ (void*) addr, len };
         if (process_vm_readv(pid, &local, 1, &remote, 1, 0) != len) {
             return RESULT_ADDR_NRA;
         }
@@ -514,12 +526,8 @@ namespace Hakutaku::Platform {
     }
 
     int writeBySyscall(pid_t pid, Pointer addr, void *data, size_t len) {
-        static iovec local;
-        static iovec remote;
-        local.iov_base = data;
-        local.iov_len = len;
-        remote.iov_base = (void*) addr;
-        remote.iov_len = len;
+        iovec local{ data, len };
+        iovec remote{ (void*) addr, len };
         if (process_vm_writev(pid, &local, 1, &remote, 1, 0) != len) {
             return RESULT_ADDR_NWA;
         }
@@ -862,6 +870,13 @@ namespace Hakutaku {
         return MemorySearcher(this);
     }
 
+    bool Process::is64Bit() const {
+        std::string path = "/proc/" + std::to_string(pid) + "/exe";
+        char buf[1024];
+        readlink(path.c_str(), buf, sizeof(buf)); // NOLINT(bugprone-unused-return-value)
+        return strstr(buf, "app_process32") == nullptr;
+    }
+
     MemorySearcher::MemorySearcher(Process *process): process(process) {
 
     }
@@ -964,255 +979,312 @@ namespace Hakutaku {
         return result.size();
     }
 
-    int MemorySearcher::searchNumber(const char *expr, Range range) {
-        if (!result.empty())
-            clearResult();
 
-        int result_code = RESULT_SUCCESS;
-        std::vector<std::any> values;
-        unsigned int group_size = 512;
+    int MemorySearcher::Lexer::llex(std::vector<std::any> &values, unsigned int &group_size, const char* expr) {
+        std::string cache; // 缓冲区
+        ValueType cache_type = Unknown;
+        RangeValue cache_range_value;
 
-        {
-            std::string cache; // 缓冲区
-            ValueType cache_type = Unknown;
-            RangeValue cache_range_value;
+        bool is_range = false; // 是否是范围值
+        bool is_out_range = false; // 是否是反范围值
+        bool is_ready_left = false; // 范围最小值是否准备好
+        bool is_ready_right = false; // 范围最大值是否准备好
 
-            bool is_range = false; // 是否是范围值
-            bool is_out_range = false; // 是否是反范围值
-            bool is_ready_left = false; // 范围最小值是否准备好
-            bool is_ready_right = false; // 范围最大值是否准备好
+        bool is_unsigned = false; // 无符号
+        bool is_inputting_value = false; // 正在输入值
+        bool is_determined_type = false; // 已决断类型
+        bool is_inputting_step = false; // 正在输入步长
 
-            bool is_unsigned = false; // 无符号
-            bool is_inputting_value = false; // 正在输入值
-            bool is_determined_type = false; // 已决断类型
-            bool is_inputting_step = false; // 正在输入步长
-
-            // 类型决断
-            auto determineType = [](bool is_unsigned, char type) {
-                switch (type) {
-                    case 'd':
-                    case 'D': {
-                        if (is_unsigned) {
-                            return ValueType::UInt;
-                        } else {
-                            return ValueType::Int;
-                        }
-                    }
-                    case 'b':
-                    case 'B': {
-                        if (is_unsigned) {
-                            return ValueType::UByte;
-                        } else {
-                            return ValueType::Byte;
-                        }
-                    }
-                    case 'w':
-                    case 'W': {
-                        if (is_unsigned) {
-                            return ValueType::UShort;
-                        } else {
-                            return ValueType::Short;
-                        }
-                    }
-                    case 'q':
-                    case 'Q': {
-                        if (is_unsigned) {
-                            return ValueType::ULong;
-                        } else {
-                            return ValueType::Long;
-                        }
-                    }
-                    case 'f':
-                    case 'F': {
-                        //printf("Float\n");
-                        return ValueType::Float;
-                    }
-                    case 'e':
-                    case 'E': {
-                        return ValueType::Double;
-                    }
-                    default: {
-                        return ValueType::Unknown;
-                    }
-                }
-            };
-            // 数据解析
-            auto parseValue = [&](bool reload = false) {
-                Value value;
-                if (!is_determined_type && is_range)
-                    cache_type = ULong; // 兼容无最小值类型的范围搜索
-                switch (cache_type) {
-                    case Byte: {
-                        auto temp = std::stol(cache);
-                        if (temp > INT8_MAX) {
-                            value.value.u8 = temp;
-                            cache_type = UByte;
-                        } else {
-                            value.value.i8 = (std::int8_t) temp;
-                        }
-                        break;
-                    }
-                    case Short: {
-                        auto temp = std::stol(cache);
-                        if (temp > INT16_MAX) {
-                            value.value.u16 = temp;
-                            cache_type = UShort;
-                        } else {
-                            value.value.i16 = (std::int16_t) temp;
-                        }
-                        break;
-                    }
-                    case Int: {
-                        auto temp = std::stol(cache);
-                        if (temp > INT32_MAX) {
-                            value.value.u32 = temp;
-                            cache_type = UInt;
-                        } else {
-                            value.value.i32 = (std::int32_t) temp;
-                        }
-                        break;
-                    }
-                    case Long: {
-                        std::uint64_t temp = std::stoul(cache);
-                        if (temp > INT64_MAX) {
-                            value.value.u64 = temp;
-                            cache_type = ULong;
-                        } else {
-                            value.value.i64 = (std::int64_t) temp;
-                        }
-                        break;
-                    }
-                    case Float:
-                        value.value.f = std::stof(cache);
-                        break;
-                    case Double:
-                        value.value.d = std::stod(cache);
-                        break;
-                    case UByte:
-                        value.value.u8 = (std::uint8_t) std::stoi(cache);
-                        break;
-                    case UShort:
-                        value.value.u16 = (std::uint16_t) std::stoi(cache);
-                        break;
-                    case UInt:
-                        value.value.u32 = (std::uint32_t) std::stoi(cache);
-                        break;
-                    case ULong:
-                        value.value.u64 = (std::uint64_t) std::stoul(cache);
-                        break;
-                    case Unknown:
-                        throw std::runtime_error("This type is prohibited from being recognized.");
-                }
-                value.type = cache_type;
-               // printf("range: %d\n", is_range);
-                if (is_range) {
-                    //printf("in a unknown range: %d\n", value.value.i32);
-                    if (!is_ready_left) {
-                        //printf("in a min range: %d\n", value.value.i32);
-                        cache_range_value.min = value;
-                        is_ready_left = true;
+        // 类型决断
+        auto determineType = [](bool is_unsigned, char type) {
+            switch (type) {
+                case 'd':
+                case 'D': {
+                    if (is_unsigned) {
+                        return ValueType::UInt;
                     } else {
-                        cache_range_value.max = value;
-                        // 类型统一
-                        //if (cache_type != cache_range_value.min.type) {
-                        //    cache_range_value.min.type = cache_type;
-                        //}
-                        // 默认取最大值类型，不需要做类型统一
-                        //printf("in a max range: %d\n", value.value.i32);
-                        is_ready_right = true;
-                        values.emplace_back(cache_range_value);
+                        return ValueType::Int;
                     }
+                }
+                case 'b':
+                case 'B': {
+                    if (is_unsigned) {
+                        return ValueType::UByte;
+                    } else {
+                        return ValueType::Byte;
+                    }
+                }
+                case 'w':
+                case 'W': {
+                    if (is_unsigned) {
+                        return ValueType::UShort;
+                    } else {
+                        return ValueType::Short;
+                    }
+                }
+                case 'q':
+                case 'Q': {
+                    if (is_unsigned) {
+                        return ValueType::ULong;
+                    } else {
+                        return ValueType::Long;
+                    }
+                }
+                case 'f':
+                case 'F': {
+                    //printf("Float\n");
+                    return ValueType::Float;
+                }
+                case 'e':
+                case 'E': {
+                    return ValueType::Double;
+                }
+                default: {
+                    return ValueType::Unknown;
+                }
+            }
+        };
+        // 数据解析
+        auto parseValue = [&](bool reload = false) {
+            Value value;
+            if (!is_determined_type && is_range)
+                cache_type = ULong; // 兼容无最小值类型的范围搜索
+            switch (cache_type) {
+                case Byte: {
+                    auto temp = std::stol(cache);
+                    if (temp > INT8_MAX) {
+                        value.value.u8 = temp;
+                        cache_type = UByte;
+                    } else {
+                        value.value.i8 = (std::int8_t) temp;
+                    }
+                    break;
+                }
+                case Short: {
+                    auto temp = std::stol(cache);
+                    if (temp > INT16_MAX) {
+                        value.value.u16 = temp;
+                        cache_type = UShort;
+                    } else {
+                        value.value.i16 = (std::int16_t) temp;
+                    }
+                    break;
+                }
+                case Int: {
+                    auto temp = std::stol(cache);
+                    if (temp > INT32_MAX) {
+                        value.value.u32 = temp;
+                        cache_type = UInt;
+                    } else {
+                        value.value.i32 = (std::int32_t) temp;
+                    }
+                    break;
+                }
+                case Long: {
+                    std::uint64_t temp = std::stoul(cache);
+                    if (temp > INT64_MAX) {
+                        value.value.u64 = temp;
+                        cache_type = ULong;
+                    } else {
+                        value.value.i64 = (std::int64_t) temp;
+                    }
+                    break;
+                }
+                case Float:
+                    value.value.f = std::stof(cache);
+                    break;
+                case Double:
+                    value.value.d = std::stod(cache);
+                    break;
+                case UByte:
+                    value.value.u8 = (std::uint8_t) std::stoi(cache);
+                    break;
+                case UShort:
+                    value.value.u16 = (std::uint16_t) std::stoi(cache);
+                    break;
+                case UInt:
+                    value.value.u32 = (std::uint32_t) std::stoi(cache);
+                    break;
+                case ULong:
+                    value.value.u64 = (std::uint64_t) std::stoul(cache);
+                    break;
+                case Unknown:
+                    throw std::runtime_error("This type is prohibited from being recognized.");
+            }
+            value.type = cache_type;
+            // printf("range: %d\n", is_range);
+            if (is_range) {
+                //printf("in a unknown range: %d\n", value.value.i32);
+                if (!is_ready_left) {
+                    //printf("in a min range: %d\n", value.value.i32);
+                    cache_range_value.min = value;
+                    is_ready_left = true;
                 } else {
-                    values.emplace_back(value);
+                    cache_range_value.max = value;
+                    // 类型统一
+                    //if (cache_type != cache_range_value.min.type) {
+                    //    cache_range_value.min.type = cache_type;
+                    //}
+                    // 默认取最大值类型，不需要做类型统一
+                    //printf("in a max range: %d\n", value.value.i32);
+                    is_ready_right = true;
+                    cache_range_value.isOutRange = is_out_range;
+                    values.emplace_back(cache_range_value);
                 }
-                cache.clear();
-                if (reload) {
-                    // 清空标记
-                    is_unsigned = false;
-                    is_determined_type = false;
-                    is_inputting_value = false;
-                    cache_type = Unknown;
-                    // 清空范围值标记
-                    if (is_range && is_ready_right) {
-                        is_range = false;
-                        is_out_range = false;
-                        is_ready_left = false;
-                        is_ready_right = false;
-                        cache_range_value = RangeValue();
-                    }
+            } else {
+                values.emplace_back(value);
+            }
+            cache.clear();
+            if (reload) {
+                // 清空标记
+                is_unsigned = false;
+                is_determined_type = false;
+                is_inputting_value = false;
+                cache_type = Unknown;
+                // 清空范围值标记
+                if (is_range && is_ready_right) {
+                    is_range = false;
+                    is_out_range = false;
+                    is_ready_left = false;
+                    is_ready_right = false;
+                    cache_range_value = RangeValue();
                 }
-            };
-            // 期盼尝试
-            auto tryNext = [&expr](int& index, char expect) {
-                bool tmp = expect == expr[index + 1];
-                if (tmp) index++;
-                return tmp;
-            };
-            // 期盼截断
-            auto expectNext = [&expr](int& index, char expect) {
-                index++;
-                char curr = expr[index];
-                return expect == curr;
-            };
+            }
+        };
+        // 期盼尝试
+        auto tryNext = [&expr](int& index, char expect) {
+            bool tmp = expect == expr[index + 1];
+            if (tmp) index++;
+            return tmp;
+        };
+        // 期盼截断
+        auto expectNext = [&expr](int& index, char expect) {
+            index++;
+            char curr = expr[index];
+            return expect == curr;
+        };
 
-            size_t s = strlen(expr);
-            if (s == 0) return RESULT_SUCCESS;
+        size_t s = strlen(expr);
+        if (s == 0) return RESULT_INVALID_ARGUMENT;
 
-            for (int i = 0; i < s; ++i) {
-                char tmp = expr[i];
-                ValueType tryDetermineType = determineType(is_unsigned, tmp);
-                if (tryDetermineType == Unknown) {
-                    if (is_determined_type && tmp != ';') {
-                        if (tmp == ':' && expectNext(i, ':')) {
-                            parseValue(true);
-                            is_inputting_step = true;
-                        } else if (tmp == '~') {
-                            is_range = true;
-                            if (tryNext(i, '~')) {
-                                is_out_range = true;
-                            }
-                            parseValue(true);
-                        } else {
-                            // 搜索规范，一旦决断了类型必须以';'结尾，除非声明步长
-                            throw std::runtime_error("Expected ';' ended up as a value but not found.");
-                        }
-                    } else if (tmp == 'u' || tmp == 'U') {
-                        is_unsigned = true; // 决断为无符号数字
+        for (int i = 0; i < s; ++i) {
+            char tmp = expr[i];
+            ValueType tryDetermineType = determineType(is_unsigned, tmp);
+            if (tryDetermineType == Unknown) {
+                if (is_determined_type && tmp != ';') {
+                    if (tmp == ':' && expectNext(i, ':')) {
+                        parseValue(true);
+                        is_inputting_step = true;
                     } else if (tmp == '~') {
                         is_range = true;
                         if (tryNext(i, '~')) {
                             is_out_range = true;
                         }
                         parseValue(true);
-                    } else if(tmp == ':' && expectNext(i, ':')) {
-                        is_inputting_step = true;
-                    } else if (tmp == ';' && !cache.empty()) {
-                        if (is_inputting_step)
-                            throw std::runtime_error("Input ';' not expected when entering group_size.");
-                        if (!is_determined_type)
-                            throw std::runtime_error("Expected input value type, but not found.");
-                        parseValue(true);
                     } else {
-                        if (!is_inputting_step)
-                            is_inputting_value = true;
-                        cache.append(expr, i, 1);
+                        // 搜索规范，一旦决断了类型必须以';'结尾，除非声明步长
+                        throw std::runtime_error("Expected ';' ended up as a value but not found.");
                     }
-                    continue;
-                } else {
-                    if (is_inputting_step)
-                        throw std::runtime_error("Declared type not expected on input group_size.");
-                    cache_type = tryDetermineType;
-                    is_determined_type = true;
-                }
-            } // for (int i = 0; i < s; ++i)
-            if (!cache.empty()) { // 处理尾值
-                if (is_inputting_value) {
+                } else if (tmp == 'u' || tmp == 'U') {
+                    is_unsigned = true; // 决断为无符号数字
+                } else if (tmp == '~') {
+                    is_range = true;
+                    if (tryNext(i, '~')) {
+                        is_out_range = true;
+                    }
                     parseValue(true);
-                } else if (is_inputting_step) {
-                    group_size = (std::uint32_t) std::stoul(cache);
+                } else if(tmp == ':' && expectNext(i, ':')) {
+                    is_inputting_step = true;
+                } else if (tmp == ';' && !cache.empty()) {
+                    if (is_inputting_step)
+                        throw std::runtime_error("Input ';' not expected when entering group_size.");
+                    if (!is_determined_type)
+                        throw std::runtime_error("Expected input value type, but not found.");
+                    parseValue(true);
+                } else {
+                    if (!is_inputting_step)
+                        is_inputting_value = true;
+                    cache.append(expr, i, 1);
                 }
+                continue;
+            } else {
+                if (is_inputting_step)
+                    throw std::runtime_error("Declared type not expected on input group_size.");
+                cache_type = tryDetermineType;
+                is_determined_type = true;
+            }
+        } // for (int i = 0; i < s; ++i)
+        if (!cache.empty()) { // 处理尾值
+            if (is_inputting_value) {
+                parseValue(true);
+            } else if (is_inputting_step) {
+                group_size = (std::uint32_t) std::stoul(cache);
             }
         }
+
+        return RESULT_SUCCESS;
+    }
+
+    MemorySearcher::ValueType
+    MemorySearcher::Lexer::getRealType(std::vector<std::any, std::allocator<std::any>>::iterator value)  {
+        ValueType type;
+        if (value->type() == typeid(Value)) {
+            auto v = std::any_cast<Value>(*value);
+            type = v.type;
+        } else if (value->type() == typeid(RangeValue)) {
+            type = std::any_cast<RangeValue>(*value).max.type;
+        } else {
+            throw std::runtime_error("Unknown value any::type.");
+        }
+        return type;
+    }
+
+    size_t MemorySearcher::Lexer::determineSize(MemorySearcher::ValueType type) {
+        switch (type) {
+            case Byte:
+                return sizeof(char);
+            case Short:
+                return sizeof(short);
+            case Int:
+                return sizeof(int);
+            case Long:
+                return sizeof(long);
+            case Float:
+                return sizeof(float);
+            case Double:
+                return sizeof(double);
+            case UByte:
+                return sizeof(unsigned char);
+            case UShort:
+                return sizeof(unsigned short);
+            case UInt:
+                return sizeof(unsigned int);
+            case ULong:
+                return sizeof(unsigned long);
+            default:
+                throw std::runtime_error("Unknown type.");
+        }
+    }
+
+    bool MemorySearcher::Lexer::isRange(std::vector<std::any, std::allocator<std::any>>::iterator value)  {
+        if (value->type() == typeid(Value)) {
+            return false;
+        } else if (value->type() == typeid(RangeValue)) {
+            return true;
+        } else {
+            throw std::runtime_error("Unknown value any::type.");
+        }
+    }
+
+    int MemorySearcher::searchNumber(const char *expr, Range range) {
+        if (!result.empty())
+            clearResult();
+
+        std::vector<std::any> values;
+        unsigned int group_size = 512;
+
+        if(Lexer::llex(values, group_size, expr))
+            return RESULT_INVALID_ARGUMENT;
 
         Maps map = Maps();
         process->getMapsLite(map, range);
@@ -1223,76 +1295,25 @@ namespace Hakutaku {
             return RESULT_INVALID_ARGUMENT;
         }
 
-        // 是否是范围值
-        auto isRange = [](std::vector<std::any, std::allocator<std::any>>::iterator value) {
-            if (value->type() == typeid(Value)) {
-                return false;
-            } else if (value->type() == typeid(RangeValue)) {
-                return true;
-            } else {
-                throw std::runtime_error("Unknown value any::type.");
-            }
-        };
-        // 获取真实类型
-        auto getRealType = [](std::vector<std::any, std::allocator<std::any>>::iterator value) {
-            ValueType type;
-            if (value->type() == typeid(Value)) {
-                auto v = std::any_cast<Value>(*value);
-                type = v.type;
-            } else if (value->type() == typeid(RangeValue)) {
-                type = std::any_cast<RangeValue>(*value).max.type;
-            } else {
-                throw std::runtime_error("Unknown value any::type.");
-            }
-            return type;
-        };
-        // 决断值长度
-        auto determineSize = [](ValueType type) {
-            switch (type) {
-                case Byte:
-                    return sizeof(char);
-                case Short:
-                    return sizeof(short);
-                case Int:
-                    return sizeof(int);
-                case Long:
-                    return sizeof(long);
-                case Float:
-                    return sizeof(float);
-                case Double:
-                    return sizeof(double);
-                case UByte:
-                    return sizeof(unsigned char);
-                case UShort:
-                    return sizeof(unsigned short);
-                case UInt:
-                    return sizeof(unsigned int);
-                case ULong:
-                    return sizeof(unsigned long);
-                default:
-                    throw std::runtime_error("Unknown type.");
-            }
-        };
-
         Page *currPage = map.start();
         auto tv = values.begin();
-        size_t valueSize = determineSize(getRealType(tv));
+        size_t valueSize = Lexer::determineSize(Lexer::getRealType(tv));
         BasicValue temp{};
 
+        size_t distance = 0;
+
         // 决断周围特征值
-        std::function<bool(std::vector<std::any, std::allocator<std::any>>::iterator iter, Pointer currPtr, Page* currPage, std::set<Pointer>&)> around = nullptr;
-        around = [&around, &values, &determineSize, &getRealType, &isRange, &group_size, this]
-                (std::vector<std::any, std::allocator<std::any>>::iterator iter, Pointer currPtr, Page* currPage, std::set<Pointer>& addrSet) {
+        std::function<bool(std::__wrap_iter<std::any*>, Pointer, Page*, std::set<Pointer>&)> around = [&around, &values, &group_size, &distance, this]
+                (auto iter, auto currPtr, auto* currPage, auto& addrSet) {
             auto next = iter + 1;
             if (next == values.cend()) {
                 return true;
             }
 
-            bool is_range = isRange(next); // 是否是范围值
-            ValueType type = getRealType(next);
-            auto size = determineSize(type);
+            bool is_range = Lexer::isRange(next); // 是否是范围值
+            ValueType type = Lexer::getRealType(next);
+            auto size = Lexer::determineSize(type);
             BasicValue temp{};
-            size_t distance = 0;
             while (currPage != nullptr) {
 #if !IGNORE_MISSING_PAGE
                 if (process->isMissingPage(currPage->start())) {
@@ -1336,7 +1357,9 @@ namespace Hakutaku {
                         auto value = std::any_cast<RangeValue>(*next);
                         auto min = value.min.value.i64;
                         auto max = value.max.value.i64;
-                        if (temp.i64 >= min && temp.i64 <= max) {
+
+                        if ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) ||
+                            ((temp.i64 < min || temp.i64 > max) && value.isOutRange)) {
                             addrSet.insert(addr);
                             return around(next, addr, currPage, addrSet);
                         }
@@ -1366,47 +1389,6 @@ namespace Hakutaku {
 #if SUPPORT_UNALIGNED_MEMORY
             for (int i = 0; i < (currPage->end() - startPtr); ++i) {
                 Pointer addr = startPtr + i;
-                process->read(addr, tmp, valueSize);
-
-                if (tv->type() == typeid(Value)) {
-                    auto value = std::any_cast<Value>(*tv);
-                    int cmp = memcmp(temp, &value.value, valueSize);
-                    if ((sign == SIGN_EQ && cmp == 0) || // equal
-                        (sign == SIGN_NE && cmp != 0) || // not equal
-                        (sign == SIGN_GT && cmp > 0) ||  // greater than
-                        (sign == SIGN_LT && cmp < 0) || // less than
-                        (sign == SIGN_GT && cmp >= 0) || // greater than or equal
-                        (sign == SIGN_LT && cmp <= 0)) { // less than or equal
-                        std::set<Pointer> addrSet;
-                        addrSet.insert(addr);
-                        if (around(tv, addr, currPage, addrSet)) {
-                            result.push_back(addrSet);
-                        }
-                    } else {
-                        continue;
-                    }
-                } else if (tv->type() == typeid(RangeValue)) {
-                    auto value = std::any_cast<RangeValue>(*tv);
-                    int cmpMin = memcmp(temp, &value.min.value, valueSize);
-                    int cmpMax = memcmp(temp, &value.max.value, valueSize);
-
-                    if ((sign == SIGN_EQ && cmpMin >= 0 && cmpMax <= 0) || // in min ~ max
-                        (sign == SIGN_NE && (cmpMin < 0 || cmpMax > 0)) || // not in min ~ max
-                        (sign == SIGN_GT && cmpMax > 0) || // greater than max
-                        (sign == SIGN_LT && cmpMin < 0) || // less than min
-                        (sign == SIGN_GT && cmpMax >= 0) || // greater than or equal max
-                        (sign == SIGN_LT && cmpMin <= 0)) { // less than or equal min
-                        std::set<Pointer> addrSet;
-                        addrSet.insert(addr);
-                        if (around(tv, addr, currPage, addrSet)) {
-                            result.push_back(addrSet);
-                        }
-                    }
-                }
-            }
-#else
-            for (int i = 0; i < (currPage->end() - startPtr) / valueSize; ++i) {
-                Pointer addr = startPtr + i * static_cast<long>(valueSize);
                 process->read(addr, &temp, valueSize);
 
                 if (tv->type() == typeid(Value)) {
@@ -1422,7 +1404,44 @@ namespace Hakutaku {
                     auto value = std::any_cast<RangeValue>(*tv);
                     auto min = value.min.value.i64;
                     auto max = value.max.value.i64;
-                    if (temp.i64 >= min && temp.i64 <= max) {
+
+                    if ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) ||
+                            ((temp.i64 < min || temp.i64 > max) && value.isOutRange)
+                    ) {
+                        std::set<Pointer> addrSet;
+                        addrSet.insert(addr);
+                        if (around(tv, addr, currPage, addrSet)) {
+                            result.emplace_back(addrSet);
+                        }
+                    }
+                } else {
+                    throw std::runtime_error("Unknown value any::type");
+                }
+            }
+#else
+            for (int i = 0; i < (currPage->end() - startPtr) / valueSize; ++i) {
+                Pointer addr = startPtr + i * static_cast<long>(valueSize);
+                process->read(addr, &temp, valueSize);
+
+                if (tv->type() == typeid(Value)) {
+                    auto value = std::any_cast<Value>(*tv);
+                    if (memcmp(&temp, &value.value, valueSize) == 0) {
+                        distance += valueSize;
+                        std::set<Pointer> addrSet;
+                        addrSet.insert(addr);
+                        if (around(tv, addr, currPage, addrSet)) {
+                            result.emplace_back(addrSet);
+                        }
+                    }
+                } else if (tv->type() == typeid(RangeValue)) {
+                    auto value = std::any_cast<RangeValue>(*tv);
+                    auto min = value.min.value.i64;
+                    auto max = value.max.value.i64;
+
+                    if ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) ||
+                            ((temp.i64 < min || temp.i64 > max) && value.isOutRange)
+                    ) {
+                        distance += valueSize;
                         std::set<Pointer> addrSet;
                         addrSet.insert(addr);
                         if (around(tv, addr, currPage, addrSet)) {
@@ -1438,7 +1457,103 @@ namespace Hakutaku {
             currPage = currPage->next();
         }
 
-        return result_code;
+        return RESULT_SUCCESS;
+    }
+
+    int MemorySearcher::filterNumber(const char *expr) {
+        if (result.empty())
+            return RESULT_EMPTY_RESULT;
+
+        std::vector<std::any> values;
+        unsigned int group_size = 512;
+
+        if(Lexer::llex(values, group_size, expr))
+            return RESULT_INVALID_ARGUMENT;
+
+        auto tv = values.begin();
+        size_t readyMatch = 0;
+        size_t valueSize = Lexer::determineSize(Lexer::getRealType(tv));
+        BasicValue temp{};
+        size_t distance = 0;
+
+        std::function<bool(
+                std::__wrap_iter<std::any*>,
+                std::set<Pointer>::iterator,
+                std::set<Pointer>&
+        )> around = [&around, &distance, &group_size, &values, &readyMatch, this](auto value_iter, std::set<Pointer>::iterator addr_iter, auto &newSet) {
+            auto curr_addr = addr_iter++;
+            auto curr_value = value_iter + 1;
+            if ((curr_addr == addr_iter || *addr_iter == 0)|| distance >= group_size) {
+                return readyMatch >= values.size();
+            }
+
+            bool is_range = Lexer::isRange(curr_value);
+            auto size = Lexer::determineSize(Lexer::getRealType(curr_value));
+            BasicValue temp{};
+
+            process->read(*addr_iter, &temp, size);
+            if (is_range) {
+                auto value = std::any_cast<RangeValue>(*curr_value);
+                auto min = value.min.value.i64;
+                auto max = value.max.value.i64;
+                if (
+                        ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) || ((temp.i64 < min || temp.i64 > max) && value.isOutRange))
+                        && (distance += size) <= group_size
+                ) {
+                    readyMatch++;
+                    newSet.insert(*addr_iter);
+                } else {
+                    curr_value = value_iter;
+                }
+            } else {
+                auto value = std::any_cast<Value>(*curr_value);
+                if (memcmp(&temp, &value.value, size) == 0 && (distance += size) <= group_size)  {
+                    readyMatch++;
+                    newSet.insert(*addr_iter);
+                } else {
+                    curr_value = value_iter;
+                }
+            }
+            return around(curr_value, addr_iter, newSet);
+        };
+
+        std::vector<std::set<Pointer>> newResult;
+        std::for_each(result.begin(), result.end(), [&](const std::set<Pointer> &group) {
+            auto head_addr = group.begin();
+            process->read(*head_addr, &temp, valueSize);
+            if (tv->type() == typeid(Value)) {
+                auto value = std::any_cast<Value>(*tv);
+                if (memcmp(&temp, &value.value, valueSize) == 0) {
+                    distance += valueSize;
+                    readyMatch++;
+                    std::set<Pointer> newSet;
+                    newSet.insert(*head_addr);
+                    if (around(tv, head_addr, newSet)) {
+                        newResult.push_back(newSet);
+                    }
+                }
+            } else if (tv->type() == typeid(RangeValue)) {
+                auto value = std::any_cast<RangeValue>(*tv);
+                auto min = value.min.value.i64;
+                auto max = value.max.value.i64;
+
+                if ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) ||
+                    ((temp.i64 < min || temp.i64 > max) && value.isOutRange)) {
+                    distance += valueSize;
+                    readyMatch++;
+                    std::set<Pointer> newSet;
+                    newSet.insert(*head_addr);
+                    if (around(tv, head_addr, newSet)) {
+                        newResult.push_back(newSet);
+                    }
+                }
+            } else {
+                throw std::runtime_error("Unknown value any::type");
+            }
+        });
+        result.clear();
+        result = std::move(newResult);
+        return RESULT_SUCCESS;
     }
 
     template<typename T>

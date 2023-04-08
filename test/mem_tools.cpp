@@ -1,6 +1,14 @@
 #include <gtest/gtest.h>
 #include "../core/Hakutaku.hpp"
 
+TEST(ProcessTools, Is64Bit) {
+    std::string packageName = "com.example.app";
+    pid_t pid = Hakutaku::getPid(packageName);
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
+
+    bool is64 = process.is64Bit();
+}
+
 TEST(MemoryTools, PrintMaps) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
