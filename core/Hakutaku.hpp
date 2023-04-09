@@ -19,7 +19,6 @@
 /*
  * 倘如你需要更多的帮助，你可以阅读
  * 1，https://github.com/bbgsm/ue4_cheat_engine/blob/main/MTools/GameTools.cpp
- *
  */
 
 #define PLAT_PROC_DIR "/proc"
@@ -249,7 +248,7 @@ namespace Hakutaku {
 
         int searchNumber(const char *expr, Range range = RANGE_ALL);
 
-        int filterNumber(const char *value_iter);
+        int filterNumber(const char *expr);
 
         /*
          * 使用上一次搜索的结果进行过滤
@@ -1081,12 +1080,22 @@ namespace Hakutaku {
                     break;
                 }
                 case Long: {
-                    std::uint64_t temp = std::stoul(cache);
-                    if (temp > INT64_MAX) {
-                        value.value.u64 = temp;
-                        cache_type = ULong;
+                    if (cache.starts_with('-')) {
+                        value.value.i64 = (std::int64_t) std::stol(cache);
                     } else {
-                        value.value.i64 = (std::int64_t) temp;
+                        std::uint64_t temp = std::stoul(cache);
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "ConstantConditionsOC"
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "UnreachableCode"
+                        if (temp > INT64_MAX) {
+                            value.value.u64 = temp;
+                            cache_type = ULong;
+                        } else {
+#pragma clang diagnostic pop
+                            value.value.i64 = (std::int64_t) temp;
+                        }
+#pragma clang diagnostic pop
                     }
                     break;
                 }
