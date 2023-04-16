@@ -293,6 +293,8 @@ namespace Hakutaku {
     }
 
     namespace Utils {
+        int dumpMemory(Process &process, Pointer start, size_t size, const std::function<void(char buf[1024 * 4], size_t size)>& receiver);
+
         void hexDump(Process &process, Pointer addr, int lines);
 
         void printMaps(Maps& map);
@@ -389,6 +391,25 @@ namespace Hakutaku::Touch {
 }
 
 namespace Hakutaku::Utils {
+    int dumpMemory(Process &process, Pointer start, size_t size, const std::function<void(char buf[1024 * 4], size_t size)>& receiver) {
+        int block = 1024 * 4;
+        size_t progress = 0;
+        char buf[block];
+        while (true) {
+            auto diff = size - progress;
+            if (block > diff) {
+                block = (int) diff;
+            }
+            if (int ret = process.read(start, buf, block) != RESULT_SUCCESS) {
+                return ret;
+            }
+            receiver(buf, block);
+            if (progress >= size)
+                break;
+        }
+        return RESULT_SUCCESS;
+    }
+
     void hexDump(Process &process, Pointer addr, int lines) {
         printf("\n\t\t::::Hex Dump::::\n\n");
         char tmp[8];
@@ -788,6 +809,8 @@ namespace Hakutaku {
 #pragma clang diagnostic pop
 #pragma clang diagnostic pop
 
+    static int PAGE_ENTRY = Platform::getPageSize() / 1024;
+
     bool Process::isMissingPage(Pointer addr) {
         if (workMode == MODE_DIRECT) {
             auto pagesize = Platform::getPageSize();
@@ -799,11 +822,9 @@ namespace Hakutaku {
                 std::string path = "/proc/" + std::to_string(pid) + "/task/" + std::to_string(pid) + "/pagemap";
                 pagemapHandle = open(path.c_str(), O_RDONLY);
             }
-            Pointer file_offset = (addr / Platform::getPageSize()) * 8;
+            Pointer file_offset = (addr / Platform::getPageSize()) * PAGE_ENTRY;
             Pointer item_bit = 0;
-            struct iovec iov{};
-            iov.iov_base = &item_bit;
-            iov.iov_len = 8;
+            struct iovec iov{ &item_bit, 8 };
             preadv(pagemapHandle, &iov, 1, file_offset);
             if(item_bit & (uint64_t) 1 << 63){
                 return false;

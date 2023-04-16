@@ -32,6 +32,17 @@ TEST(MemoryTools, HexDump) {
     // Will print 16 lines (168 bytes) of hex information to the console
 }
 
+TEST(MemoryTools, DumpMem) {
+    std::string packageName = "com.example.app";
+    pid_t pid = Hakutaku::getPid(packageName);
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
+
+    Pointer baseAddress = process.findModuleBase("libexample.so");
+    Hakutaku::Utils::dumpMemory(process, baseAddress, 1024, [](char buf[1024 * 4], size_t currBufSize) {
+        // ...
+    });
+}
+
 TEST(MemorySafe, PassInotify) {
     // 懒得解释这个有什么用，下面是源码
     // system("echo 0 > /proc/sys/fs/inotify/max_user_watches");
