@@ -56,7 +56,6 @@ TEST(MemoryOperate, SearchAndFilterBaseValue) {
         });
     } else {
         // search failed
-        printf("搜索失败，错误码：%d\n", ret);
     }
 }
 
@@ -71,21 +70,25 @@ TEST(MemoryOperate, OnlySearchData) {
     int ret = searcher.search((void *) data, 7, RANGE_OTHER);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
-        int size = searcher.size(); // number of search results
-        std::for_each(searcher.getResult().begin(), searcher.getResult().end(), [&](const std::set<Pointer> &ptrSet) {
-            printf("==========> Group[%zu]\n", ptrSet.size());
-            std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
-                printf("0x%04lx\n", ptr);
-            });
-            printf("\n");
-        });
     } else {
         // search failed
-        printf("搜索失败，错误码：%d\n", ret);
     }
 }
 
+TEST(MemoryOperate, ScanMemory) {
+    std::string packageName = "com.example.app";
+    pid_t pid = Hakutaku::getPid(packageName);
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
 
+    // base type search
+    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    int ret = searcher.searchNumber("1D;2f;10001~100002D::256");
+    if(ret == RESULT_SUCCESS) {
+        // ...
+    } else {
+        // search failed
+    }
+}
 
 int main() {
     ::testing::InitGoogleTest();

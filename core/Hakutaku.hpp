@@ -1121,11 +1121,8 @@ namespace Hakutaku {
                     throw std::runtime_error("This type is prohibited from being recognized.");
             }
             value.type = cache_type;
-            // printf("range: %d\n", is_range);
             if (is_range) {
-                //printf("in a unknown range: %d\n", value.value.i32);
                 if (!is_ready_left) {
-                    //printf("in a min range: %d\n", value.value.i32);
                     cache_range_value.min = value;
                     is_ready_left = true;
                 } else {
