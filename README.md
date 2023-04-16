@@ -1,84 +1,73 @@
 # Hakutaku
 
-Language: [简体中文](README.md) | [English](README_en.md)
+Language: [简体中文](README_zh.md) | [English](README.md)
 
 ![GitHub release](https://img.shields.io/github/release/fuqiuluo/Hakutaku.svg)
 ![GitHub license](https://img.shields.io/github/license/fuqiuluo/HakutakU.svg)
 ![GitHub repo size](https://img.shields.io/github/repo-size/fuqiuluo/Hakutaku.svg)
 ![GitHub top language](https://img.shields.io/github/languages/top/fuqiuluo/Hakutaku.svg)
 
-Hakutaku名为白泽，寓意无所不知。一款内存修改器/按键精灵核心程序，支持安卓SDK24以上版本。
+Hakutaku's name is Bai Ze, which means omniscient. A memory modifier key wizard core program, supporting Android SDK 24 and above.
 
 Hakutaku is a memory modification tool based on the Android SDK 24+.
 
-# 使用方法
+# Instructions
 
-#### 当前支持的内存范围
+#### Supported Memory Ranges
 
 ```c++
-#define RANGE_ALL 8190 // 全内存
-#define RANGE_BAD 2 // B内存
-#define RANGE_V 4 // V内存
-#define RANGE_CA 8 // CA内存
-#define RANGE_CB 16 // CB内存
-#define RANGE_CD 32 // CD内存
-#define RANGE_CH 64 // CH内存
-#define RANGE_JH 128 // JH内存
-#define RANGE_A 256 // A内存
-#define RANGE_XS 512 // XS内存
-#define RANGE_S 1024 // S内存
-#define RANGE_AS 2048 // AS内存
-#define RANGE_OTHER 4096
+#define RANGE_ALL 8190 // all
+#define RANGE_BAD 2 // b
+#define RANGE_V 4 // v
+#define RANGE_CA 8 // ca
+#define RANGE_CB 16 // cb
+#define RANGE_CD 32 // cd
+#define RANGE_CH 64 // ch
+#define RANGE_JH 128 // jh
+#define RANGE_A 256 // a
+#define RANGE_XS 512 // xs
+#define RANGE_S 1024 // s
+#define RANGE_AS 2048 // as
+#define RANGE_OTHER 4096 // other
 ```
 
-#### 状态码/错误码
+#### StatusCode/ErrorCode
 ```c++
-// 搜索返回code
-#define RESULT_SUCCESS 0 // 成功
-#define RESULT_OFE (-1) // 打开文件错误
-#define RESULT_ADDR_NRA (-2) // 地址不可读
-#define RESULT_ADDR_NWA (-3) // 地址不可写
-#define RESULT_UNKNOWN_WORK_MODE (-4) // 未知内存读取/写入模式
-#define RESULT_EMPTY_MAPS (-5) // maps为空
-#define RESULT_NOT_FUNDAMENTAL (-6) // 非基础类型(使用无需提供size的模式搜索值时，只支持基础类型)
-#define RESULT_EMPTY_RESULT (-7) // 搜索结果为空
-// 以上代码不需要写进你自己的文件里面，只是给你看看
+// result-code of searching
+#define RESULT_SUCCESS 0 // success
+#define RESULT_OFE (-1) // error opening file
+#define RESULT_ADDR_NRA (-2) // address not readable
+#define RESULT_ADDR_NWA (-3) // address not writable
+#define RESULT_UNKNOWN_WORK_MODE (-4) // unknown memory read write mode
+#define RESULT_EMPTY_MAPS (-5) // maps is empty
+#define RESULT_NOT_FUNDAMENTAL (-6) // Non-basic types (only basic types are supported when using a mode that does not need to provide a size to search for values)
+#define RESULT_EMPTY_RESULT (-7) // search result is empty
+// The above code does not need to be written into your own file, just for you to see
 ```
+#### Caution
 
-#### 搜索值支持的Sign
-```c++
-// 搜索值支持的Sign
-#define SIGN_EQ 0 // 等于
-#define SIGN_NE 1 // 不等于
-#define SIGN_GT 2 // 大于
-#define SIGN_GE 3 // 大于等于
-#define SIGN_LT 4 // 小于
-#define SIGN_LE 5 // 小于等于
-// 以上代码不需要写进你自己的项目里面，只是给你看看
-```
+- Copying of the **Process** object is prohibited, otherwise the /proc/[pid]/mem handle will be released early, resulting in an exception.
 
-#### 使用注意
+## Demo 
 
-- Process对象禁止复制，不然将导致/proc/[pid]/mem句柄提前释放，从而导致异常。
+### [GetPid Demo](/test/pidof.cpp)
 
-### [获取Pid Demo](/test/pidof.cpp)
+### [SUSPEND/RESUME/KILL PROCESS Demo](/test/stop_and_recover.cpp)
 
-### [挂起/恢复/杀死进程 Demo](/test/stop_and_recover.cpp)
+### [GetModuleBaseAddress Demo](/test/get_module_base.cpp)
 
-### [获取ModuleBaseAddress Demo](/test/get_module_base.cpp)
+### [Read/Write Memory Demo](/test/read_and_write.cpp)
 
-### [读取/写入内存 Demo](/test/read_and_write.cpp)
+### [GetTheSpecifiedMemoryRangeMaps](/test/get_maps.cpp)
 
-### [获取指定内存范围Maps](/test/get_maps.cpp)
+### [Determine whether the current memory page is faulty](/test/is_memory_trap.cpp)
 
-### [判断当前内存是否缺页](/test/is_memory_trap.cpp)
+### [SetTheCurrentReadAndWriteMemoryMode](/test/set_mem_mode.cpp)
 
-### [设置当前读取/写入内存模式](/test/set_mem_mode.cpp)
+### [SingleValueSearch/FilterOperation](/test/search_and_filter.cpp)
 
-### [单值搜索/过滤操作](/test/search_and_filter.cpp)
+### [FederatedSearch](/test/search_and_filter.cpp#L78)
 
-### [联合搜索/高级搜索](/test/search_and_filter.cpp#78)
+### [MemoryTool](/test/mem_tools.cpp)
 
-### [内存工具](/test/mem_tools.cpp)
-
-### 触摸工具（TODO）
+### TouchTool（TODO）

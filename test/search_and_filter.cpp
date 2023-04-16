@@ -90,6 +90,23 @@ TEST(MemoryOperate, ScanMemory) {
     }
 }
 
+TEST(MemoryOperate, ScanAndFilterMemory) {
+    std::string packageName = "com.example.app";
+    pid_t pid = Hakutaku::getPid(packageName);
+    Hakutaku::Process process = Hakutaku::openProcess(pid);
+
+    // base type search
+    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    int ret = searcher.searchNumber("1D;2f;10001~100002D::256");
+    if(ret == RESULT_SUCCESS) {
+        // ...
+        int rs = searcher.filterNumber("1D;2F::12");
+        // ...
+    } else {
+        // search failed
+    }
+}
+
 int main() {
     ::testing::InitGoogleTest();
     return RUN_ALL_TESTS();
