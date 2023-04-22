@@ -72,4 +72,6 @@ Hakutaku is a memory modification tool based on the Android SDK 24+.
 
 ### [MemoryTool](/test/mem_tools.cpp)
 
+### [FuzzySearch(Hot)](/test/fuzzy_search.cpp)
+
 ### TouchTool（TODO）

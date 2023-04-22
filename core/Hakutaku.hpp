@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <unordered_map>
 #include <unistd.h>
 #include <thread>
 #include <linux/uinput.h>
@@ -62,6 +63,33 @@ typedef int Range;
 typedef short WorkMode;
 
 namespace Hakutaku {
+    union BasicValue {
+        std::int8_t i8;
+        std::int16_t i16;
+        std::int32_t i32;
+        std::int64_t i64;
+        std::uint8_t u8;
+        std::uint16_t u16;
+        std::uint32_t u32;
+        std::uint64_t u64;
+        float f;
+        double d;
+    };
+
+    enum ValueType: std::int8_t {
+        Byte,
+        Short,
+        Int,
+        Long,
+        Float,
+        Double,
+        UByte,
+        UShort,
+        UInt,
+        ULong,
+        Unknown
+    };
+
     class Page {
     private:
         Pointer _start;
@@ -127,6 +155,7 @@ namespace Hakutaku {
     };
 
     class MemorySearcher;
+    class FuzzySearcher;
 
     class Process {
     private:
@@ -162,47 +191,41 @@ namespace Hakutaku {
         int write(Pointer addr, void *data, size_t len);
 
         MemorySearcher getSearcher();
-        /* it will lead to a strong bug!
-        template<typename T>
-        int read(Pointer addr, T *data) {
-            return read(addr, data, sizeof(T));
-        }
 
-        template<typename T>
-        int write(Pointer addr, T *data) {
-            return write(addr, data, sizeof(T));
-        } */
+        FuzzySearcher getFuzzySearcher();
+    };
+
+    class FuzzySearcher {
+    private:
+        Process* process;
+        ValueType valueType = Unknown;
+        std::unordered_map<Pointer, BasicValue> cacheValue;
+
+        explicit FuzzySearcher(Process *process);
+    public:
+        int dump(Range range, ValueType type);
+
+        int changed();
+
+        int increased();
+
+        int decreased();
+
+        int unchanged();
+
+        bool empty();
+
+        size_t getResultSize();
+
+        std::unordered_map<Pointer, BasicValue>& getResult();
+
+        void clearResult();
+
+        friend class Process;
     };
 
     class MemorySearcher {
     private:
-        enum ValueType: std::int8_t {
-            Byte,
-            Short,
-            Int,
-            Long,
-            Float,
-            Double,
-            UByte,
-            UShort,
-            UInt,
-            ULong,
-            Unknown
-        };
-
-        union BasicValue {
-            std::int8_t i8;
-            std::int16_t i16;
-            std::int32_t i32;
-            std::int64_t i64;
-            std::uint8_t u8;
-            std::uint16_t u16;
-            std::uint32_t u32;
-            std::uint64_t u64;
-            float f;
-            double d;
-        };
-
         class Value {
         public:
             BasicValue value{};
@@ -217,12 +240,6 @@ namespace Hakutaku {
             bool isOutRange = false;
         };
 
-    private:
-        Process *process;
-        std::vector<std::set<Pointer>> result;
-
-        explicit MemorySearcher(Process *process);
-
         class Lexer {
         public:
             static int llex(std::vector<std::any> &values, unsigned int& group_size, const char* expr);
@@ -233,6 +250,11 @@ namespace Hakutaku {
 
             static bool isRange(std::vector<std::any, std::allocator<std::any>>::iterator value);
         };
+    private:
+        Process *process;
+        std::vector<std::set<Pointer>> result;
+
+        explicit MemorySearcher(Process *process);
     public:
         int search(size_t size, Range range, const std::function<bool(void*)>& matcher);
 
@@ -270,6 +292,7 @@ namespace Hakutaku {
         [[nodiscard]] size_t size() const;
 
         friend class Process;
+        friend class FuzzySearcher;
     };
 
     namespace Touch {
@@ -897,8 +920,129 @@ namespace Hakutaku {
         return strstr(buf, "app_process32") == nullptr;
     }
 
-    MemorySearcher::MemorySearcher(Process *process): process(process) {
+    FuzzySearcher Process::getFuzzySearcher() {
+        return FuzzySearcher(this);
+    }
 
+    FuzzySearcher::FuzzySearcher(Process *process): process(process) {
+
+    }
+
+    int FuzzySearcher::dump(Range range, ValueType type) {
+        Maps map = Maps();
+        int ret = process->getMaps(map, range);
+        if (ret != RESULT_SUCCESS)
+            return ret;
+        if (map.empty())
+            return RESULT_EMPTY_MAPS;
+        Page* start = map.start();
+        if (start == nullptr)
+            return RESULT_ADDR_NRA;
+
+#if SUPPORT_UNALIGNED_MEMORY
+        throw std::runtime_error("Does not support unaligned memory.");
+#endif
+        Page* currPage = start;
+        auto size = MemorySearcher::Lexer::determineSize(type);
+        this->valueType = type;
+        BasicValue tmp{};
+        while (currPage != nullptr) {
+            auto st = currPage->start();
+#if !IGNORE_MISSING_PAGE
+            if (process->isMissingPage(st)) {
+                goto nextPage;
+            }
+#endif
+            for (int i = 0; i < (currPage->end() - st) / size; ++i) {
+                Pointer addr = st + i * static_cast<int>(size);
+                process->read(addr, &tmp, size);
+                cacheValue[addr] = tmp;
+            }
+            nextPage:
+            currPage = currPage->next();
+        }
+
+        return RESULT_SUCCESS;
+    }
+
+    bool FuzzySearcher::empty() {
+        return cacheValue.empty();
+    }
+
+    size_t FuzzySearcher::getResultSize() {
+        return cacheValue.size();
+    }
+
+    std::unordered_map<Pointer, BasicValue> &FuzzySearcher::getResult() {
+        return cacheValue;
+    }
+
+    void FuzzySearcher::clearResult() {
+        cacheValue.clear();
+        this->valueType = Unknown;
+    }
+
+    int FuzzySearcher::changed() {
+        if (valueType == Unknown) {
+            return RESULT_EMPTY_RESULT;
+        }
+        BasicValue tmp{};
+        auto size = MemorySearcher::Lexer::determineSize(valueType);
+        erase_if(cacheValue, [&](const auto &item) {
+            Pointer addr = item.first;
+            BasicValue origin = item.second;
+            process->read(addr, &tmp, size);
+            return tmp.i64 == origin.i64;
+        });
+        return RESULT_SUCCESS;
+    }
+
+    int FuzzySearcher::increased() {
+        if (valueType == Unknown) {
+            return RESULT_EMPTY_RESULT;
+        }
+        BasicValue tmp{};
+        auto size = MemorySearcher::Lexer::determineSize(valueType);
+        erase_if(cacheValue, [&](const auto &item) {
+            Pointer addr = item.first;
+            BasicValue origin = item.second;
+            process->read(addr, &tmp, size);
+            return tmp.i64 <= origin.i64;
+        });
+        return RESULT_SUCCESS;
+    }
+
+    int FuzzySearcher::decreased() {
+        if (valueType == Unknown) {
+            return RESULT_EMPTY_RESULT;
+        }
+        BasicValue tmp{};
+        auto size = MemorySearcher::Lexer::determineSize(valueType);
+        erase_if(cacheValue, [&](const auto &item) {
+            Pointer addr = item.first;
+            BasicValue origin = item.second;
+            process->read(addr, &tmp, size);
+            return tmp.i64 >= origin.i64;
+        });
+        return RESULT_SUCCESS;
+    }
+
+    int FuzzySearcher::unchanged() {
+        if (valueType == Unknown) {
+            return RESULT_EMPTY_RESULT;
+        }
+        BasicValue tmp{};
+        auto size = MemorySearcher::Lexer::determineSize(valueType);
+        erase_if(cacheValue, [&](const auto &item) {
+            Pointer addr = item.first;
+            BasicValue origin = item.second;
+            process->read(addr, &tmp, size);
+            return tmp.i64 != origin.i64;
+        });
+        return RESULT_SUCCESS;
+    }
+
+    MemorySearcher::MemorySearcher(Process *process): process(process) {
     }
 
     int MemorySearcher::search(void *data, size_t size, Range range) {
@@ -1252,8 +1396,7 @@ namespace Hakutaku {
         return RESULT_SUCCESS;
     }
 
-    MemorySearcher::ValueType
-    MemorySearcher::Lexer::getRealType(std::vector<std::any, std::allocator<std::any>>::iterator value)  {
+    ValueType MemorySearcher::Lexer::getRealType(std::vector<std::any, std::allocator<std::any>>::iterator value)  {
         ValueType type;
         if (value->type() == typeid(Value)) {
             auto v = std::any_cast<Value>(*value);
@@ -1266,7 +1409,7 @@ namespace Hakutaku {
         return type;
     }
 
-    size_t MemorySearcher::Lexer::determineSize(MemorySearcher::ValueType type) {
+    size_t MemorySearcher::Lexer::determineSize(ValueType type) {
         switch (type) {
             case Byte:
                 return sizeof(char);
@@ -1349,28 +1492,36 @@ namespace Hakutaku {
 #endif
 #if SUPPORT_UNALIGNED_MEMORY
                 for (int i = 0; i < (currPage->end() - startPtr); ++i) {
-                    if (distance > group_size)
+                    if (distance > group_size) {
                         return false;
-                    Pointer addr = currPtr + i * static_cast<int>(size);
-                    process->read(addr, temp, size);
+                    }
+                    Pointer addr = currPtr + i * static_cast<long >(size);
+                    process->read(addr, &temp, size);
+
                     if (is_range) {
                         auto value = std::any_cast<RangeValue>(*next);
-                        int cmpMin = memcmp(temp, &value.min.value, size);
-                        int cmpMax = memcmp(temp, &value.max.value, size);
-                        if (cmpMin >= 0 && cmpMax <= 0) {
+                        auto min = value.min.value.i64;
+                        auto max = value.max.value.i64;
+
+                        if ((temp.i64 >= min && temp.i64 <= max && !value.isOutRange) ||
+                            ((temp.i64 < min || temp.i64 > max) && value.isOutRange)) {
                             addrSet.insert(addr);
-                            if (around(next, addr, currPage, addrSet)) {
-                                result.push_back(addrSet);
+                            if (allowFuzzySearch) {
+                                cacheValue[addr] = temp;
                             }
+                            return around(next, addr, currPage, addrSet);
                         }
                     } else {
                         auto value = std::any_cast<Value>(*next);
-                        if (memcmp(temp, &value.value, size) == 0) {
+                        if (memcmp(&temp, &value.value, size) == 0) {
                             addrSet.insert(addr);
+                            if (allowFuzzySearch) {
+                                cacheValue[addr] = temp;
+                            }
                             return around(next, addr, currPage, addrSet);
                         }
                     }
-                    distance++;
+                    distance += size;
                 }
 #else
                 for (int i = 0; i < (currPage->end() - currPtr) / size; ++i) {
@@ -1457,6 +1608,7 @@ namespace Hakutaku {
                         std::set<Pointer> addrSet;
                         addrSet.insert(addr);
                         if (around(tv, addr, currPage, addrSet)) {
+
                             result.emplace_back(addrSet);
                         }
                     }
