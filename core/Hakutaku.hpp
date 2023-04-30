@@ -532,18 +532,15 @@ namespace Hakutaku::Platform {
     }
 
     void stopProcess(pid_t pid) {
-        std::string cmd = "kill -STOP " + std::to_string(pid);
-        std::system(cmd.c_str());
+        kill(pid, SIGSTOP);
     }
 
     void recoverProcess(pid_t pid) {
-        std::string cmd = "kill -CONT " + std::to_string(pid);
-        std::system(cmd.c_str());
+        kill(pid, SIGCONT);
     }
 
     void killProcess(pid_t pid) {
-        std::string cmd = "kill " + std::to_string(pid);
-        std::system(cmd.c_str());
+        kill(pid, SIGKILL);
     }
 
     std::string execCmd(const char *cmd) {
@@ -880,7 +877,7 @@ namespace Hakutaku {
             case MODE_MEM: {
                 if (memHandle == 0) {
                     std::string path = "/proc/" + std::to_string(pid) + "/mem";
-                    memHandle = open(path.c_str(), 00000002);
+                    memHandle = open(path.c_str(), O_RDWR);
                 }
                 return Platform::readByMem(memHandle, addr, data, len);
             }
@@ -897,7 +894,7 @@ namespace Hakutaku {
             case MODE_MEM: {
                 if (memHandle == 0) {
                     std::string path = "/proc/" + std::to_string(pid) + "/mem";
-                    memHandle = open(path.c_str(), 00000002);
+                    memHandle = open(path.c_str(), O_RDWR);
                 }
                 return Platform::writeByMem(memHandle, addr, data, len);
             }
