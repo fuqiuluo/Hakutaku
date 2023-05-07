@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <iconv.h>
 #include <sys/uio.h>
+#include <sys/endian.h>
 
 /*
  * 倘如你需要更多的帮助，你可以阅读
@@ -77,17 +78,18 @@ namespace Hakutaku {
     };
 
     enum ValueType: std::int8_t {
-        Byte,
-        Short,
-        Int,
-        Long,
-        Float,
-        Double,
-        UByte,
-        UShort,
-        UInt,
-        ULong,
-        Unknown
+        Byte = 0,
+        Short = 1,
+        Int = 2,
+        Long = 3,
+        Float = 4,
+        Double = 5,
+        UByte = 6,
+        UShort = 7,
+        UInt = 8,
+        ULong = 9,
+        Ptr = 10,
+        Unknown = 11
     };
 
     class Page {
@@ -197,11 +199,125 @@ namespace Hakutaku {
 
     class FuzzySearcher {
     private:
+        class WireFormat {
+            // Number of bits in a tag which identify the wire type.
+            static constexpr int kTagTypeBits = 3;
+            // Mask for those bits.
+            static constexpr uint16_t kTagTypeMask = (1 << kTagTypeBits) - 1;
+
+            static void int16_to_buf(int16_t num, char* buf) {
+                int16_t t = htons(num);
+                memcpy(buf, &t, sizeof(t));
+            }
+
+            static void int32_to_buf(int32_t num, char* buf) {
+                int32_t t = htonl(num);
+                memcpy(buf, &t, sizeof(t));
+            }
+
+            static void int64_to_buf(int64_t num, char* buf) {
+                int64_t t = htobe64(num);
+                memcpy(buf, &t, sizeof(t));
+            }
+        public:
+            static int16_t buf_to_int16(const char* buf) {
+                int16_t t = *(int16_t*)buf;
+                return ntohs(t);
+            }
+
+            static int32_t buf_to_int32(const char* buf) {
+                int32_t t = *(int32_t*)buf;
+                return ntohl(t);
+            }
+
+            static int64_t buf_to_int64(const char* buf) {
+                uint64_t t = *(uint64_t*)buf;
+                return be64toh(t);
+            }
+
+            static std::uint16_t MakeTag(int offset, ValueType type) {
+                return static_cast<uint16_t>((static_cast<uint16_t>(offset) << kTagTypeBits) | (type));
+            }
+
+            static ValueType GetTagValueType(uint16_t tag) {
+                return static_cast<ValueType>(tag & kTagTypeMask);
+            }
+
+            static int GetTagOffset(uint16_t tag) {
+                return static_cast<int>(tag >> kTagTypeBits);
+            }
+
+            static uint16_t GetTagBuf(const uint8_t *data) {
+                return buf_to_int16((char *) data);
+            }
+
+            static void WriteBaseAddress(std::vector<uint8_t> &dst, Pointer ptr) {
+                uint16_t tag = MakeTag(0, Ptr);
+                char tagData[sizeof(uint16_t)];
+                int16_to_buf((int16_t) tag, tagData);
+                dst.insert(dst.end(), std::begin(tagData), std::end(tagData));
+
+                char ptrData[sizeof(Pointer)];
+                int64_to_buf(ptr, ptrData);
+                dst.insert(dst.end(), std::begin(ptrData), std::end(ptrData));
+            }
+
+            static void WriteVarNumber(std::vector<uint8_t> &dst, int offset, BasicValue value, ValueType type) {
+                char valueData[sizeof(int64_t)];
+                size_t valueSize;
+                uint32_t tag;
+                if (type == ValueType::Double) {
+                    tag = MakeTag(offset, ValueType::Double);
+                    valueSize = sizeof(double);
+                    union {
+                        int64_t i64;
+                        double d;
+                    } tmp{};
+                    tmp.d = value.d;
+                    int64_to_buf(tmp.i64, valueData);
+                } else if (type == ValueType::Float) {
+                    tag = MakeTag(offset, ValueType::Float);
+                    valueSize = sizeof(float);
+                    union {
+                        int32_t i64;
+                        float d;
+                    } tmp{};
+                    tmp.d = value.f;
+                    int32_to_buf(tmp.i64, valueData);
+                } else if (value.i64 >= INT8_MIN && value.i64 <= INT8_MAX) {
+                    tag = MakeTag(offset, ValueType::Byte);
+                    valueSize = sizeof(int8_t);
+                    valueData[0] = value.i8;
+                } else if (value.i64 >= INT16_MIN && value.i64 <= INT16_MAX) {
+                    tag = MakeTag(offset, ValueType::Short);
+                    valueSize = sizeof(int16_t);
+                    int16_to_buf(value.i16, valueData);
+                } else if (value.i64 >= INT32_MIN && value.i64 <= INT32_MAX) {
+                    tag = MakeTag(offset, ValueType::Int);
+                    valueSize = sizeof(int32_t);
+                    int32_to_buf(value.i32, valueData);
+                } else if (value.i64 >= INT64_MIN && value.i64 <= INT64_MAX) {
+                    tag = MakeTag(offset, ValueType::Long);
+                    valueSize = sizeof(int64_t);
+                    int64_to_buf(value.i64, valueData);
+                } else {
+                    throw std::runtime_error("Wrong number range.");
+                }
+                char tagData[sizeof(uint16_t)];
+                int16_to_buf((int16_t) tag, tagData);
+                dst.insert(dst.end(), std::begin(tagData), std::end(tagData));
+                dst.insert(dst.end(), valueData, valueData + valueSize);
+            }
+        };
+    private:
         Process* process;
         ValueType valueType = Unknown;
-        std::unordered_map<Pointer, BasicValue> cacheValue;
+        std::vector<std::uint8_t> cacheValue;
+        size_t _size = 0;
 
         explicit FuzzySearcher(Process *process);
+
+        void check(const std::function<bool(BasicValue ori, BasicValue curr)>& checker);
     public:
         int dump(Range range, ValueType type);
 
@@ -213,11 +329,11 @@ namespace Hakutaku {
 
         int unchanged();
 
-        bool empty();
+        [[nodiscard]] bool empty() const;
 
-        size_t getResultSize();
+        [[nodiscard]] size_t getResultSize() const;
 
-        std::unordered_map<Pointer, BasicValue>& getResult();
+        std::vector<Pointer> getResult();
 
         void clearResult();
 
@@ -926,6 +1042,9 @@ namespace Hakutaku {
     }
 
     int FuzzySearcher::dump(Range range, ValueType type) {
+        if (!cacheValue.empty()) {
+            cacheValue.clear();
+        }
         Maps map = Maps();
         int ret = process->getMaps(map, range);
         if (ret != RESULT_SUCCESS)
@@ -940,9 +1059,11 @@ namespace Hakutaku {
         throw std::runtime_error("Does not support unaligned memory.");
 #endif
         Page* currPage = start;
+        Pointer baseAddr = 0;
         auto size = MemorySearcher::Lexer::determineSize(type);
         this->valueType = type;
         BasicValue tmp{};
+
         while (currPage != nullptr) {
             auto st = currPage->start();
 #if !IGNORE_MISSING_PAGE
@@ -952,8 +1073,14 @@ namespace Hakutaku {
 #endif
             for (int i = 0; i < (currPage->end() - st) / size; ++i) {
                 Pointer addr = st + i * static_cast<int>(size);
-                process->read(addr, &tmp, size);
-                cacheValue[addr] = tmp;
+                if (process->read(addr, &tmp, size) == RESULT_SUCCESS) {
+                    if (baseAddr == 0 || (addr - baseAddr) > 4095) {
+                        baseAddr = addr;
+                        WireFormat::WriteBaseAddress(cacheValue, baseAddr);
+                    }
+                    size++;
+                    WireFormat::WriteVarNumber(cacheValue, (int) (addr - baseAddr), tmp, type);
+                }
             }
             nextPage:
             currPage = currPage->next();
@@ -962,16 +1089,63 @@ namespace Hakutaku {
         return RESULT_SUCCESS;
     }
 
-    bool FuzzySearcher::empty() {
-        return cacheValue.empty();
+    bool FuzzySearcher::empty() const {
+        return _size == 0;
     }
 
-    size_t FuzzySearcher::getResultSize() {
-        return cacheValue.size();
+    size_t FuzzySearcher::getResultSize() const {
+        return _size;
     }
 
-    std::unordered_map<Pointer, BasicValue> &FuzzySearcher::getResult() {
-        return cacheValue;
+    std::vector<Pointer> FuzzySearcher::getResult() {
+        std::vector<Pointer> results;
+        Pointer baseAddr = 0;
+        uint8_t *start = cacheValue.data();
+        size_t pos = 0;
+        for (int i = 0; i < _size; i++) {
+            readTag:
+            uint16_t tag = WireFormat::GetTagBuf(start + pos);
+            pos += 2;
+            ValueType type = WireFormat::GetTagValueType(tag);
+            int offset = WireFormat::GetTagOffset(tag);
+            switch (type) {
+                case UByte:
+                case Byte: {
+                    pos += sizeof(int8_t);
+                    results.emplace_back(baseAddr + offset);
+                    break;
+                }
+                case UShort:
+                case Short: {
+                    pos += sizeof(int16_t);
+                    results.emplace_back(baseAddr + offset);
+                    break;
+                }
+                case Float:
+                case UInt:
+                case Int: {
+                    pos += sizeof(int32_t);
+                    results.emplace_back(baseAddr + offset);
+                    break;
+                }
+                case Double:
+                case ULong:
+                case Long: {
+                    pos += sizeof(int64_t);
+                    results.emplace_back(baseAddr + offset);
+                    break;
+                }
+                case Ptr: {
+                    baseAddr = WireFormat::buf_to_int64( (char *) (start + pos));
+                    pos += sizeof(Pointer);
+                    goto readTag;
+                }
+                case Unknown: {
+                    throw std::runtime_error("parsing data failed.");
+                }
+            }
+        }
+        return std::move(results);
     }
 
     void FuzzySearcher::clearResult() {
@@ -983,13 +1157,8 @@ namespace Hakutaku {
         if (valueType == Unknown) {
             return RESULT_EMPTY_RESULT;
         }
-        BasicValue tmp{};
-        auto size = MemorySearcher::Lexer::determineSize(valueType);
-        erase_if(cacheValue, [&](const auto &item) {
-            Pointer addr = item.first;
-            BasicValue origin = item.second;
-            process->read(addr, &tmp, size);
-            return tmp.i64 == origin.i64;
+        check([](BasicValue ori, BasicValue cur) {
+            return ori.i64 != cur.i64;
         });
         return RESULT_SUCCESS;
     }
@@ -998,13 +1167,8 @@ namespace Hakutaku {
         if (valueType == Unknown) {
             return RESULT_EMPTY_RESULT;
         }
-        BasicValue tmp{};
-        auto size = MemorySearcher::Lexer::determineSize(valueType);
-        erase_if(cacheValue, [&](const auto &item) {
-            Pointer addr = item.first;
-            BasicValue origin = item.second;
-            process->read(addr, &tmp, size);
-            return tmp.i64 <= origin.i64;
+        check([](BasicValue ori, BasicValue cur) {
+            return ori.i64 < cur.i64;
         });
         return RESULT_SUCCESS;
     }
@@ -1013,13 +1177,8 @@ namespace Hakutaku {
         if (valueType == Unknown) {
             return RESULT_EMPTY_RESULT;
         }
-        BasicValue tmp{};
-        auto size = MemorySearcher::Lexer::determineSize(valueType);
-        erase_if(cacheValue, [&](const auto &item) {
-            Pointer addr = item.first;
-            BasicValue origin = item.second;
-            process->read(addr, &tmp, size);
-            return tmp.i64 >= origin.i64;
+        check([](BasicValue ori, BasicValue cur) {
+            return ori.i64 > cur.i64;
         });
         return RESULT_SUCCESS;
     }
@@ -1028,15 +1187,95 @@ namespace Hakutaku {
         if (valueType == Unknown) {
             return RESULT_EMPTY_RESULT;
         }
-        BasicValue tmp{};
-        auto size = MemorySearcher::Lexer::determineSize(valueType);
-        erase_if(cacheValue, [&](const auto &item) {
-            Pointer addr = item.first;
-            BasicValue origin = item.second;
-            process->read(addr, &tmp, size);
-            return tmp.i64 != origin.i64;
+        check([](BasicValue ori, BasicValue cur) {
+            return ori.i64 == cur.i64;
         });
         return RESULT_SUCCESS;
+    }
+
+    void FuzzySearcher::check(const std::function<bool(BasicValue, BasicValue)>& checker) {
+        std::vector<uint8_t> result;
+        BasicValue tmp{};
+        auto size = MemorySearcher::Lexer::determineSize(valueType);
+        Pointer baseAddr = 0;
+        uint8_t *start = cacheValue.data();
+        size_t pos = 0;
+        Pointer newBaseAddr = 0;
+        for (int i = 0; i < _size; i++) {
+            readTag:
+            uint16_t tag = WireFormat::GetTagBuf(start + pos);
+            pos += 2;
+            ValueType type = WireFormat::GetTagValueType(tag);
+            int offset = WireFormat::GetTagOffset(tag);
+            BasicValue origin{};
+            switch (type) {
+                case UByte:
+                case Byte: {
+                    pos += sizeof(int8_t);
+                    origin.u8 = *(start + offset);
+                    break;
+                }
+                case UShort:
+                case Short: {
+                    pos += sizeof(int16_t);
+                    origin.i16 = WireFormat::buf_to_int16((char*) (start + offset));
+                    break;
+                }
+                case Float: {
+                    pos += sizeof(float);
+                    union {
+                        float f;
+                        int32_t i32;
+                    } temp{};
+                    temp.i32 = WireFormat::buf_to_int32((char*) (start + offset));
+                    origin.f = temp.f;
+                    break;
+                }
+                case UInt:
+                case Int: {
+                    pos += sizeof(int32_t);
+                    origin.i32 = WireFormat::buf_to_int32((char*) (start + offset));
+                    break;
+                }
+                case Double: {
+                    pos += sizeof(double);
+                    union {
+                        double d;
+                        int64_t i64;
+                    } temp{};
+                    temp.i64 = WireFormat::buf_to_int64((char*) (start + offset));
+                    origin.d = temp.d;
+                    break;
+                }
+                case ULong:
+                case Long: {
+                    pos += sizeof(int64_t);
+                    origin.i64 = WireFormat::buf_to_int64((char*) (start + offset));
+                    break;
+                }
+                case Ptr: {
+                    baseAddr = WireFormat::buf_to_int64( (char *) (start + pos));
+                    pos += sizeof(Pointer);
+                    goto readTag;
+                    break;
+                }
+                case Unknown: {
+                    throw std::runtime_error("parsing data failed.");
+                    break;
+                }
+            }
+            Pointer addr = baseAddr + offset;
+            process->read(addr, &tmp, size);
+            if (checker(origin, tmp)) {
+                if (newBaseAddr == 0 || (addr - newBaseAddr) > 4095) {
+                    newBaseAddr = addr;
+                    WireFormat::WriteBaseAddress(result, newBaseAddr);
+                }
+                WireFormat::WriteVarNumber(result, (int) (addr - newBaseAddr), tmp, valueType);
+            }
+        }
+        cacheValue.clear();
+        cacheValue = std::move(result);
     }
 
     MemorySearcher::MemorySearcher(Process *process): process(process) {
