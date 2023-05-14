@@ -5,6 +5,8 @@
 #include <malloc.h>
 #include <cstdio>
 #include <cstdlib>
+#include <any>
+#include <set>
 #include <fcntl.h>
 #include <unordered_map>
 #include <unistd.h>
@@ -491,7 +493,7 @@ namespace Hakutaku {
      */
     pid_t getPid(std::string& packageName);
 
-    inline Process openProcess(pid_t pid);
+    inline std::shared_ptr<Process> openProcess(pid_t pid);
 }
 
 namespace Hakutaku::Touch {
@@ -530,7 +532,7 @@ namespace Hakutaku::Touch {
 }
 
 namespace Hakutaku::Utils {
-    int dumpMemory(Process &process, Pointer start, size_t size, const std::function<void(char buf[1024 * 4], size_t size)>& receiver) {
+    int dumpMemory(const std::shared_ptr<Process>& process, Pointer start, size_t size, const std::function<void(char buf[1024 * 4], size_t size)>& receiver) {
         int block = 1024 * 4;
         size_t progress = 0;
         char buf[block];
@@ -539,7 +541,7 @@ namespace Hakutaku::Utils {
             if (block > diff) {
                 block = (int) diff;
             }
-            if (int ret = process.read(start, buf, block) != RESULT_SUCCESS) {
+            if (int ret = process->read(start, buf, block) != RESULT_SUCCESS) {
                 return ret;
             }
             receiver(buf, block);
@@ -549,7 +551,7 @@ namespace Hakutaku::Utils {
         return RESULT_SUCCESS;
     }
 
-    void hexDump(Process &process, Pointer addr, int lines) {
+    void hexDump(const std::shared_ptr<Process>& process, Pointer addr, int lines) {
         printf("\n\t\t::::Hex Dump::::\n\n");
         char tmp[8];
         for(int i = 0;i < lines;i++) {
@@ -558,7 +560,7 @@ namespace Hakutaku::Utils {
 #else
             printf("0x%04lx: ", addr + (i * 8));
 #endif
-            process.read(addr + (i * 8), &tmp, sizeof tmp);
+            process->read(addr + (i * 8), &tmp, sizeof tmp);
             for(char j : tmp) {
 #if defined(__LP64__)
                 printf("%02hhx ", j);
@@ -2021,8 +2023,7 @@ namespace Hakutaku {
         return 0;
     }
 
-    inline Process openProcess(pid_t pid) {
-        auto process = Process(pid);
-        return process;
+    inline std::shared_ptr<Process> openProcess(pid_t pid) {
+        return std::make_shared<Process>(pid);
     }
 }

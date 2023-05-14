@@ -4,10 +4,10 @@
 TEST(GetMaps, Lite) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
 
     Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process.getMapsLite(maps, RANGE_ALL); // get full memory
+    int result = process->getMapsLite(maps, RANGE_ALL); // get full memory
     if(result == RESULT_SUCCESS) {
         maps.clear(); //  Clean up the results of the previous search in the map
     }
@@ -24,10 +24,10 @@ TEST(GetMaps, Lite) {
 TEST(GetMaps, Full) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
 
     Hakutaku::Maps maps = Hakutaku::Maps();
-    process.getMaps(maps, RANGE_ALL);
+    process->getMaps(maps, RANGE_ALL);
     Hakutaku::Utils::printMaps(maps); // Print maps information to the console
 }
 

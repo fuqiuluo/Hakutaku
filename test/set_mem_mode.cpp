@@ -4,9 +4,9 @@
 TEST(MemoryOperate, SetMode) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
-    process.workMode = MODE_SYSCALL; // by syscall
+    process->workMode = MODE_SYSCALL; // by syscall
 
     // process.workMode = MODE_MEM; // by mem file
     // This will happen open(proc/pid/mem)

@@ -5,7 +5,8 @@ project(Hakutaku)
 set(CMAKE_CXX_STANDARD 23)
 
 # PROJECT SETTING
-set(BUILD_UNIT_TEST ON)
+set(BUILD_UNIT_TEST OFF)
+set(BUILD_FOR_CONSOLE ON)
 
 # PLATFORM SETTING
 set(HAKUTAKU_64BIT ON) # 64bit platform
@@ -36,6 +37,11 @@ if(BUILD_UNIT_TEST)
             core/Hakutaku.hpp)
 
     target_link_libraries(Hakutaku gtest gtest_main)
+
+elseif (BUILD_FOR_CONSOLE)
+    message("-- Build for console")
+    add_executable(Hakutaku console/main.cpp
+            core/Hakutaku.hpp)
 else()
     message("-- Build common")
     add_executable(Hakutaku main.cpp

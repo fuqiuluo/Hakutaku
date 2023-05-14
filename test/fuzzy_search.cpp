@@ -4,9 +4,9 @@
 TEST(MemoryOperate, FuzzySearch) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
 
-    Hakutaku::FuzzySearcher searcher = process.getFuzzySearcher();
+    Hakutaku::FuzzySearcher searcher = process->getFuzzySearcher();
     int ret = searcher.dump(RANGE_A, Hakutaku::Int);
     if(ret == RESULT_SUCCESS) {
         searcher.changed(); // 改变了

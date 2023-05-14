@@ -8,13 +8,13 @@ TEST(APP, GainMAPS) {
     pid_t pid = Hakutaku::getPid(packageName);
     ASSERT_NE(pid, 0);
     printf("Pid: %d\n", pid);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
-    printf("Bit64: %d\n", process.is64Bit());
+    printf("Bit64: %d\n", process->is64Bit());
 
-    process.workMode = MODE_SYSCALL;
+    process->workMode = MODE_SYSCALL;
     Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process.getMapsLite(maps, RANGE_ALL);
+    int result = process->getMapsLite(maps, RANGE_ALL);
     ASSERT_EQ(result, 0);
     printf("Maps Size: %zu\n", maps.size());
     if (!maps.empty()) {
@@ -25,10 +25,10 @@ TEST(APP, GainMAPS) {
         printf("/apex/com.android.runtime/lib/bionic/libc.so Base: 0x%04lx\n", start);
 
         maps.clear();
-        ASSERT_EQ(process.getMaps(maps, RANGE_A), 0);
+        ASSERT_EQ(process->getMaps(maps, RANGE_A), 0);
         Hakutaku::Utils::printMaps(maps);
 
-        Hakutaku::MemorySearcher searcher = process.getSearcher();
+        Hakutaku::MemorySearcher searcher = process->getSearcher();
         searcher.searchNumber("10086D;0D;1D", RANGE_A);
         printf("ResultSize: %zu\n", searcher.size());
 
@@ -39,7 +39,7 @@ TEST(APP, GainMAPS) {
             printf("==========> Group[%zu]\n", ptrSet.size());
             std::for_each(ptrSet.begin(), ptrSet.end(), [&](const auto &ptr) {
                 int value = 0;
-                process.read(ptr, &value, sizeof(int));
+                process->read(ptr, &value, sizeof(int));
                 printf("0x%04lx: %d\n", ptr, value);
             });
         });

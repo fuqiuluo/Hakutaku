@@ -4,10 +4,10 @@
 TEST(MemoryOperate, OnlySearchBaseValue) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     // base type search
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    Hakutaku::MemorySearcher searcher = process->getSearcher();
     int ret = searcher.search(1, RANGE_A);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
@@ -28,10 +28,10 @@ TEST(MemoryOperate, OnlySearchBaseValue) {
 TEST(MemoryOperate, SearchAndFilterBaseValue) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     // based value search
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    Hakutaku::MemorySearcher searcher = process->getSearcher();
     int ret = searcher.search(1, RANGE_A);
     if(ret == RESULT_SUCCESS) {
         // Search succeeded
@@ -62,10 +62,10 @@ TEST(MemoryOperate, SearchAndFilterBaseValue) {
 TEST(MemoryOperate, OnlySearchData) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     // base type search
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    Hakutaku::MemorySearcher searcher = process->getSearcher();
     const char* data = "abcdefg";
     int ret = searcher.search((void *) data, 7, RANGE_OTHER);
     if(ret == RESULT_SUCCESS) {
@@ -78,10 +78,10 @@ TEST(MemoryOperate, OnlySearchData) {
 TEST(MemoryOperate, ScanMemory) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     // base type search
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    Hakutaku::MemorySearcher searcher = process->getSearcher();
     int ret = searcher.searchNumber("1D;2f;10001~100002D::256");
     if(ret == RESULT_SUCCESS) {
         // ...
@@ -93,10 +93,10 @@ TEST(MemoryOperate, ScanMemory) {
 TEST(MemoryOperate, ScanAndFilterMemory) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     // base type search
-    Hakutaku::MemorySearcher searcher = process.getSearcher();
+    Hakutaku::MemorySearcher searcher = process->getSearcher();
     int ret = searcher.searchNumber("1D;2f;10001~100002D::256");
     if(ret == RESULT_SUCCESS) {
         // ...

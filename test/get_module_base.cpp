@@ -4,15 +4,15 @@
 TEST(GetModuleBase, NoMatchBss) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Pointer baseAddress = process.findModuleBase("libexample.so");
+    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
+    Pointer baseAddress = process->findModuleBase("libexample.so");
 }
 
 TEST(GetModuleBase, MatchBss) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
-    Pointer baseAddress = process.findModuleBase("libexample.so", true);
+    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
+    Pointer baseAddress = process->findModuleBase("libexample.so", true);
 }
 
 int main() {
