@@ -1201,6 +1201,7 @@ namespace Hakutaku {
         uint8_t *start = cacheValue.data();
         size_t pos = 0;
         Pointer newBaseAddr = 0;
+        size_t newSize = 0;
         for (int i = 0; i < _size; i++) {
             readTag:
             uint16_t tag = WireFormat::GetTagBuf(start + pos);
@@ -1272,10 +1273,12 @@ namespace Hakutaku {
                     WireFormat::WriteBaseAddress(result, newBaseAddr);
                 }
                 WireFormat::WriteVarNumber(result, (int) (addr - newBaseAddr), tmp, valueType);
+                newSize++;
             }
         }
-        cacheValue.clear();
-        cacheValue = std::move(result);
+        this->cacheValue.clear();
+        this->cacheValue = std::move(result);
+        this->_size = newSize;
     }
 
     MemorySearcher::MemorySearcher(Process *process): process(process) {
@@ -1515,6 +1518,7 @@ namespace Hakutaku {
                 case UInt:
                     value.value.u32 = (std::uint32_t) std::stoi(cache);
                     break;
+                case Ptr:
                 case ULong:
                     value.value.u64 = (std::uint64_t) std::stoul(cache);
                     break;
