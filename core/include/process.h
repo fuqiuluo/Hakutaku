@@ -23,6 +23,7 @@ namespace hak {
         memory_mode mem_mode;
 
         handle mem_fd;
+        handle pagemap_fd;
     public:
         explicit process(pid_t pid);
         ~process();
@@ -33,11 +34,12 @@ namespace hak {
 
         void write(pointer addr, void *data, size_t len);
 
-        void set_memory_mode(memory_mode mode) {
-            this->mem_mode = mode;
-        }
+        void set_memory_mode(memory_mode mode);
+
+        auto is_missing_page(pointer address) -> bool;
     private:
         void init_mem_fd();
+        void init_pagemaps_fd();
     };
 }
 

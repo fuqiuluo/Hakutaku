@@ -11,8 +11,11 @@
 namespace hak {
     class memory_searcher {
         std::shared_ptr<hak::process> process;
+        i32 range = ALL;
     public:
         explicit memory_searcher(std::shared_ptr<hak::process> process);
+
+        void set_memory_range(i32 range);
 
         void searchNumber(const std::string& expr, value_type default_type);
     };

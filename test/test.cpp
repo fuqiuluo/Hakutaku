@@ -4,6 +4,8 @@
 #include "reader.h"
 #include "writer.h"
 #include "searcher.h"
+#include <unistd.h>
+#include <sys/mman.h>
 
 #include <iostream>
 
@@ -16,11 +18,12 @@ TEST(APP, GetPid) {
         std::cout << "pid: " << pid << "\n";
         auto process = std::make_shared<hak::process>(pid);
         process->set_memory_mode(memory_mode::SYSCALL);
-        auto maps = process->get_maps();
         auto searcher = hak::memory_searcher(process);
-        std::string a = "16D;32F;123456D";
-        searcher.searchNumber(a, hak::type_i32);
 
+        auto maps = process->get_maps();
+        do {
+            std::cout << std::hex << "address = " << maps->start() << ", missing = " << process->is_missing_page(maps->start()) << ", name = " << maps->module_name << "\n";
+        } while ((maps = maps->next()));
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";
     }
