@@ -75,33 +75,7 @@ void hak::process::init_pagemaps_fd() {
     }
 }
 
-auto hak::process::is_missing_page(pointer address) -> bool {
-    if (this->mem_mode == DIRECT) {
-        auto pagesize = getpagesize();
-        unsigned char vec = 0;
-        mincore((void*) (address & (~(pagesize - 1))), pagesize, &vec);
-        return vec == 1;
-    }
+auto hak::process::get_page_entry(pointer address) -> hak::pagemap_entry {
     this->init_pagemaps_fd();
-    size_t nread;
-    int64_t ret;
-    uint64_t data;
-    pointer file_offset = (address / sysconf(_SC_PAGE_SIZE)) * sizeof(data); // NOLINT(*-narrowing-conversions)
-    struct iovec iov{ &data, sizeof(data) };
-    nread = 0;
-    while (nread < sizeof(data)) {
-        iov.iov_len = sizeof(data) - nread;
-        ret = preadv(this->pagemap_fd, &iov, 1, file_offset);
-        nread += ret;
-        if (ret <= 0) {
-            return false;
-        }
-    }
-    //auto pfn = data & (((uint64_t)1 << 54) - 1);
-    //auto soft_dirty = (data >> 54) & 1;
-    //auto file_page = (data >> 61) & 1;
-    //auto swapped = (data >> 62) & 1;
-    auto present = (data >> 63) & 1;
-    //return present == 0 && swapped == 0;
-    return present == 0;
+    return hak::get_pagemap_entry(this->pagemap_fd, address);
 }

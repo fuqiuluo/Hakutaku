@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "proc_maps.h"
+#include "proc_pagemap.h"
 #include "types.h"
 
 namespace hak {
@@ -36,7 +37,7 @@ namespace hak {
 
         void set_memory_mode(memory_mode mode);
 
-        auto is_missing_page(pointer address) -> bool;
+        auto get_page_entry(pointer address) -> hak::pagemap_entry;
     private:
         void init_mem_fd();
         void init_pagemaps_fd();

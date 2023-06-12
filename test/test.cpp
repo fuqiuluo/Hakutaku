@@ -19,11 +19,10 @@ TEST(APP, GetPid) {
         auto process = std::make_shared<hak::process>(pid);
         process->set_memory_mode(memory_mode::SYSCALL);
         auto searcher = hak::memory_searcher(process);
+        auto reader = hak::memory_reader(process);
 
         auto maps = process->get_maps();
-        do {
-            std::cout << std::hex << "address = " << maps->start() << ", missing = " << process->is_missing_page(maps->start()) << ", name = " << maps->module_name << "\n";
-        } while ((maps = maps->next()));
+
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";
     }

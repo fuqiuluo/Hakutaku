@@ -22,7 +22,6 @@ namespace hak {
             auto start = maps->start();
             auto end = maps->end();
 
-            std::cout << std::hex << "Addr = " << start << ", missing = " << process->is_missing_page(start) << "\n";
         } while ((maps = maps->next()));
     }
 
