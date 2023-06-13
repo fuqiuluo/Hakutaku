@@ -23,9 +23,13 @@ namespace hak {
         std::shared_ptr<hak::process> process;
         i32 range = ALL;
 
-        bool ignore_swapped_page = true;
-        bool ignore_missing_page = true;
+        struct {
+            bool ignore_swapped_page: 1 = true;
+            bool ignore_missing_page: 1 = true;
 
+            pointer start: 8 = 0;
+            pointer end: 8 = 0;
+        } config;
         //std::vector<pointer> results;
         std::unordered_set<pointer> results;
     public:
@@ -37,7 +41,12 @@ namespace hak {
 
         void set_ignore_missing_page(bool ignore);
 
+        void set_search_range(pointer start, pointer end);
+
         auto searchNumber(const std::string& callback_addr, value_type default_type, match_sign sign = EQ) -> size_t;
+
+    private:
+        auto organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest);
     };
 }
 

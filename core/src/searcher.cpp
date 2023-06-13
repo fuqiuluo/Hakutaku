@@ -15,11 +15,11 @@ namespace hak {
     }
 
     void memory_searcher::set_ignore_swapped_page(bool ignore) {
-        this->ignore_swapped_page = ignore;
+        this->config.ignore_swapped_page = ignore;
     }
 
     void memory_searcher::set_ignore_missing_page(bool ignore) {
-        this->ignore_missing_page = ignore;
+        this->config.ignore_missing_page = ignore;
     }
 
     auto get_legal_pages(std::shared_ptr<process>& process, std::shared_ptr<proc_maps>& maps,
@@ -42,31 +42,27 @@ namespace hak {
         }
     }
 
-    auto organize_memory_page_groups(std::shared_ptr<process>& process,
-                                     bool ignore_swapped_page, bool ignore_missing_page, i32 range, std::vector<std::pair<pointer, pointer>>& dest) {
+    auto hak::memory_searcher::organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest) {
         std::vector<std::pair<pointer, pointer>> pages;
-        auto maps = process->get_maps(range);
+        auto maps = this->process->get_maps(range);
         do {
-            get_legal_pages(process, maps, ignore_swapped_page, ignore_missing_page, pages);
+            get_legal_pages(process, maps, this->config.ignore_swapped_page, this->config.ignore_missing_page, pages);
         } while ((maps = maps->next()));
-
-        //std::cout << "legal page size = " << pages.size() << "\n";
-
         pointer start = 0;
         pointer end = 0;
         std::for_each(pages.begin(), pages.end(), [&](const std::pair<pointer, pointer> &item) {
-            if (start == 0) {
-                start = item.first;
-                end = item.second;
-                //std::cout << std::hex << "first page = " << start << "-" << end << "\n";
-            } else {
-                if (end == item.first) {
-                    end = item.second;
-                } else {
-                    //std::cout << std::hex << "push page = " << start << "-" << end << "\n";
-                    dest.emplace_back(start, end);
+            if (this->config.end == 0 || (item.first >= this->config.start && item.second <= this->config.end)) {
+                if (start == 0) {
                     start = item.first;
                     end = item.second;
+                } else {
+                    if (end == item.first) {
+                        end = item.second;
+                    } else {
+                        dest.emplace_back(start, end);
+                        start = item.first;
+                        end = item.second;
+                    }
                 }
             }
         });
@@ -260,7 +256,7 @@ namespace hak {
                 });
             }
             addr += value_size; // NOLINT(*-narrowing-conversions)
-        } while (addr <= end);
+        } while (addr <= end && (end - addr) >= value_size);
         return false;
     }
 
@@ -270,7 +266,7 @@ namespace hak {
             return 0;
         }
         std::vector<std::pair<pointer, pointer>> pages;
-        organize_memory_page_groups(this->process, this->ignore_swapped_page, this->ignore_swapped_page, this->range, pages);
+        this->organize_memory_page_groups(pages);
         std::for_each(pages.begin(), pages.end(), [&](const std::pair<pointer, pointer> &item) {
             auto start = item.first;
             auto end = item.second;
@@ -290,11 +286,19 @@ namespace hak {
                     });
                 }
                 addr += value_size; // NOLINT(*-narrowing-conversions)
-            } while (addr < end);
+            } while (addr < end && (end - addr) >= value_size);
         });
         //std::sort(this->results.begin(), this->results.end());
         //this->results.erase(std::unique(this->results.begin(), this->results.end()), this->results.end());
         return this->results.size();
+    }
+
+    void memory_searcher::set_search_range(pointer start, pointer end) {
+        if (end < start || start < 0 || end < 0) {
+            throw std::range_error("Searcher range is illegal.");
+        }
+        this->config.start = start;
+        this->config.end = end;
     }
 }
 
