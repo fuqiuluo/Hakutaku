@@ -1,12 +1,9 @@
 #include "searcher.h"
 
-#include <any>
 #include <vector>
 #include <unordered_set>
 #include <functional>
-#include <iostream>
 #include <unistd.h>
-#include <sys/mman.h>
 
 namespace hak {
     memory_searcher::memory_searcher(std::shared_ptr<hak::process> process) {
@@ -243,6 +240,7 @@ namespace hak {
 
     auto scan_value(std::shared_ptr<process>& process, const std::pair<pointer, pointer>& pair, size_t size, // NOLINT(*-no-recursion)
                     std::vector<value>::iterator value, match_sign sign, std::unordered_set<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
+        //std::vector<value>::iterator value, match_sign sign, std::vector<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
         auto start = pair.first;
         auto end = pair.second;
         auto value_size = get_value_size(*value);
@@ -257,6 +255,7 @@ namespace hak {
                 auto next = std::next(value);
                 scan_value(process, std::make_pair(addr, end), size, next, sign, result, depth + 1, [&](pointer _addr) {
                     result.insert(_addr);
+                    //result.emplace_back(_addr);
                     callback(addr);
                 });
             }
@@ -280,17 +279,21 @@ namespace hak {
             do {
                 if (match_value(process, values[0], addr, sign)) {
                     std::unordered_set<pointer> result;
-                    scan_value(process, std::make_pair(addr, end), values.size(), std::next(values.begin()), sign, result, 0, [&](pointer _addr) {
-                        result.insert(_addr);
-                        result.insert(addr);
-                        std::copy(result.begin(), result.end(), std::back_inserter(this->results));
+                    //std::vector<pointer> result;
+                    scan_value(process, std::make_pair(addr, end), values.size(), std::next(values.begin()), sign, result, 0, [&](pointer callback_addr) {
+                        this->results.insert(result.begin(), result.end());
+                        this->results.insert(callback_addr);
+                        this->results.insert(addr);
+                        //std::copy(result.begin(), result.end(), std::back_inserter(this->results));
+                        //this->results.emplace_back(callback_addr);
+                        //this->results.emplace_back(addr);
                     });
                 }
                 addr += value_size; // NOLINT(*-narrowing-conversions)
             } while (addr < end);
         });
-        std::sort(this->results.begin(), this->results.end());
-        this->results.erase(std::unique(this->results.begin(), this->results.end()), this->results.end());
+        //std::sort(this->results.begin(), this->results.end());
+        //this->results.erase(std::unique(this->results.begin(), this->results.end()), this->results.end());
         return this->results.size();
     }
 }
