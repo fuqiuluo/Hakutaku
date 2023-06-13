@@ -20,8 +20,7 @@ TEST(APP, GetPid) {
         process->set_memory_mode(memory_mode::SYSCALL);
         auto searcher = hak::memory_searcher(process);
         auto reader = hak::memory_reader(process);
-
-        auto maps = process->get_maps();
+        searcher.searchNumber("32D;5454D;555D", type_i32);
 
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";

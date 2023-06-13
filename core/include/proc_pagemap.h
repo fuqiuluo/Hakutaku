@@ -14,6 +14,8 @@ namespace hak {
     };
 
     auto get_pagemap_entry(handle pagemap_fd, pointer vaddr) -> pagemap_entry;
+
+    auto virt_to_phy(pointer vaddr) -> pointer;
 }
 
 #endif //HAK_PROC_PAGEMAP_H
