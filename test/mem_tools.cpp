@@ -4,18 +4,18 @@
 TEST(ProcessTools, Is64Bit) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
-    bool is64 = process.is64Bit();
+    bool is64 = process->is64Bit();
 }
 
 TEST(MemoryTools, PrintMaps) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
     Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process.getMaps(maps, RANGE_ALL);
+    int result = process->getMaps(maps, RANGE_ALL);
     if(result == RESULT_SUCCESS) {
         Hakutaku::Utils::printMaps(maps);
     }
@@ -24,9 +24,9 @@ TEST(MemoryTools, PrintMaps) {
 TEST(MemoryTools, HexDump) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
-    Pointer baseAddress = process.findModuleBase("libexample.so");
+    Pointer baseAddress = process->findModuleBase("libexample.so");
     Hakutaku::Utils::hexDump(process, baseAddress, 16);
     // 将打印16行的（16*8字节）的hex信息到控制台
     // Will print 16 lines (168 bytes) of hex information to the console
@@ -35,9 +35,9 @@ TEST(MemoryTools, HexDump) {
 TEST(MemoryTools, DumpMem) {
     std::string packageName = "com.example.app";
     pid_t pid = Hakutaku::getPid(packageName);
-    Hakutaku::Process process = Hakutaku::openProcess(pid);
+    auto process = Hakutaku::openProcess(pid);
 
-    Pointer baseAddress = process.findModuleBase("libexample.so");
+    Pointer baseAddress = process->findModuleBase("libexample.so");
     Hakutaku::Utils::dumpMemory(process, baseAddress, 1024, [](char buf[1024 * 4], size_t currBufSize) {
         // ...
     });
