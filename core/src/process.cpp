@@ -1,7 +1,5 @@
 #include <fcntl.h>
 #include <string>
-#include <iostream>
-#include <sys/mman.h>
 #include "process.h"
 #include "memory.h"
 

@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_set>
 #include <functional>
+#include <algorithm>
 #include <unistd.h>
 
 namespace hak {
@@ -235,7 +236,7 @@ namespace hak {
     }
 
     auto scan_value(std::shared_ptr<process>& process, const std::pair<pointer, pointer>& pair, size_t size, // NOLINT(*-no-recursion)
-                    std::vector<value>::iterator value, match_sign sign, std::unordered_set<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
+                    std::vector<value>::iterator value, match_sign sign, std::unordered_set<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> void {
         //std::vector<value>::iterator value, match_sign sign, std::vector<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
         auto start = pair.first;
         auto end = pair.second;
@@ -246,21 +247,39 @@ namespace hak {
             if (match_value(process, *value, addr, sign)) {
                 if (depth >= size - 2) {
                     callback(addr);
-                    return true;
+                    return;
                 }
                 auto next = std::next(value);
-                scan_value(process, std::make_pair(addr, end), size, next, sign, result, depth + 1, [&](pointer _addr) {
-                    result.insert(_addr);
-                    //result.emplace_back(_addr);
+                scan_value(process, std::make_pair(addr, end), size, next, sign, result, depth + 1, [&](pointer address) {
+                    result.insert(address);
+                    //result.emplace_back(address);
                     callback(addr);
                 });
             }
             addr += value_size; // NOLINT(*-narrowing-conversions)
         } while (addr <= end && (end - addr) >= value_size);
-        return false;
+   }
+
+    void memory_searcher::set_search_range(pointer start, pointer end) {
+        if (end < start || start < 0 || end < 0) {
+            throw std::range_error("Searcher range is illegal.");
+        }
+        this->config.start = start;
+        this->config.end = end;
+    }
+
+    void memory_searcher::clear_results() {
+        this->results.clear();
+    }
+
+    auto memory_searcher::get_results() -> const std::unordered_set<pointer> & {
+        return this->results;
     }
 
     auto memory_searcher::searchNumber(const std::string &expr, value_type default_type, match_sign sign) -> size_t {
+        if (!this->results.empty()) {
+            this->clear_results();
+        }
         auto values = hak::parse_search_number_expr(expr, default_type);
         if (values.empty()) {
             return 0;
@@ -293,12 +312,59 @@ namespace hak {
         return this->results.size();
     }
 
-    void memory_searcher::set_search_range(pointer start, pointer end) {
-        if (end < start || start < 0 || end < 0) {
-            throw std::range_error("Searcher range is illegal.");
+    auto organize_unordered_pointer(std::unordered_set<pointer>& input, std::vector<pointer>& output) {
+        std::copy(input.begin(), input.end(), std::back_inserter(output));
+        std::sort(output.begin(), output.end());
+    }
+
+    using pointer_iterator [[maybe_unused]] = std::vector<pointer>::iterator;
+    auto filter_value(std::shared_ptr<process>& process, std::vector<value>::iterator value, // NOLINT(*-no-recursion)
+                      pointer_iterator head, pointer_iterator end, match_sign sign,
+                      std::unordered_set<pointer>& result, size_t size, i32 depth, std::function<void(pointer addr)> callback) -> void {
+        for (auto it = head; it != end; ++it) {
+            pointer address = *it;
+            if (match_value(process, *value, address, sign)) {
+                if (depth >= size - 2) {
+                    callback(address);
+                    return;
+                }
+                filter_value(process, std::next(value), std::next(it), end, sign, result, size, depth + 1, [&](pointer addr) {
+                    result.insert(addr);
+                    callback(address);
+                });
+            }
         }
-        this->config.start = start;
-        this->config.end = end;
+    }
+
+    auto memory_searcher::filterNumber(const std::string &expr, value_type default_type,
+                                       match_sign sign) -> size_t {
+        auto values = hak::parse_search_number_expr(expr, default_type);
+        if (values.empty()) {
+            if (!this->results.empty()) {
+                this->clear_results();
+            }
+            return 0;
+        }
+        std::vector<pointer> address_list;
+        organize_unordered_pointer(this->results, address_list);
+
+        std::unordered_set<pointer> new_results;
+
+        auto start = address_list.begin();
+        auto end = address_list.end();
+        for (auto it = start; it != end; ++it) {
+            pointer address = *it;
+            if (match_value(this->process, values[0], address, sign)) {
+                std::unordered_set<pointer> result;
+                filter_value(this->process, std::next(values.begin()), std::next(it), end, sign, result, values.size(), 0, [&](pointer addr) {
+                    new_results.insert(result.begin(), result.end());
+                    new_results.insert(addr);
+                    new_results.insert(address);
+                });
+            }
+        }
+        this->results = std::move(new_results);
+        return this->results.size();
     }
 }
 

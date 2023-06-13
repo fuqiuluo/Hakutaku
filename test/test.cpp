@@ -21,8 +21,10 @@ TEST(APP, GetPid) {
         auto searcher = hak::memory_searcher(process);
         auto reader = hak::memory_reader(process);
         searcher.set_memory_range(memory_range::A);
-        auto size = searcher.searchNumber("1D;0D;1D", type_i32);
+        auto size = searcher.searchNumber("1D;2D;0D;1D", type_i32, EQ);
         std::cout << "search result size: " << size << "\n";
+        size = searcher.filterNumber("2D;0D;1D", type_i32, EQ);
+        std::cout << "filter result size: " << size << "\n";
 
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";

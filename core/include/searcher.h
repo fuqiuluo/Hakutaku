@@ -43,8 +43,13 @@ namespace hak {
 
         void set_search_range(pointer start, pointer end);
 
-        auto searchNumber(const std::string& callback_addr, value_type default_type, match_sign sign = EQ) -> size_t;
+        void clear_results();
 
+        auto get_results() -> const std::unordered_set<pointer>&;
+
+        auto searchNumber(const std::string& expr, value_type default_type, match_sign sign = EQ) -> size_t;
+
+        auto filterNumber(const std::string& address, value_type default_type, match_sign sign = EQ) -> size_t;
     private:
         auto organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest);
     };
