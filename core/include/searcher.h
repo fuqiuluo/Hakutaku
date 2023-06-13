@@ -35,7 +35,7 @@ namespace hak {
 
         void set_ignore_missing_page(bool ignore);
 
-        void searchNumber(const std::string& expr, value_type default_type, match_sign sign = EQ);
+        auto searchNumber(const std::string& expr, value_type default_type, match_sign sign = EQ) -> size_t;
     };
 }
 

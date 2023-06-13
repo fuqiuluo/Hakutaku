@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include <istream>
+#include <iostream>
 #include <string>
 #include <cctype>
 
@@ -33,6 +34,7 @@ namespace hak {
         if (type == type_i32) {
             auto num = std::stoul(value_str);
             if (is_unsigned) {
+                //std::cout << "push = " << num << "\n";
                 values.emplace_back(((u32) num));
             } else {
                 values.emplace_back(((i32) num));
@@ -44,6 +46,7 @@ namespace hak {
             if (is_unsigned) {
                 values.emplace_back(((u8) num));
             } else {
+                //std::cout << "push i8 = " << num << "\n";
                 values.emplace_back(((i8) num));
             }
         } else if (type == type_i16) {
@@ -130,11 +133,11 @@ namespace hak {
             } else {
                 auto value_str = token.substr(0, token.size() - 1);
                 auto type = determine_type(token);
+                // std::cout << "type = " << type << "\n";
                 bool is_unsigned = std::isdigit(value_str[0]) != 0;
                 parse_and_push(value_str, type == type_unknown ? default_type : type, is_unsigned, values);
             }
         }
-
         return std::move(values);
     }
 }

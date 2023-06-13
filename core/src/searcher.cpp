@@ -2,6 +2,7 @@
 
 #include <any>
 #include <vector>
+#include <unordered_set>
 #include <functional>
 #include <iostream>
 #include <unistd.h>
@@ -52,22 +53,27 @@ namespace hak {
             get_legal_pages(process, maps, ignore_swapped_page, ignore_missing_page, pages);
         } while ((maps = maps->next()));
 
-        pointer start;
-        pointer end;
+        //std::cout << "legal page size = " << pages.size() << "\n";
+
+        pointer start = 0;
+        pointer end = 0;
         std::for_each(pages.begin(), pages.end(), [&](const std::pair<pointer, pointer> &item) {
             if (start == 0) {
                 start = item.first;
                 end = item.second;
+                //std::cout << std::hex << "first page = " << start << "-" << end << "\n";
             } else {
                 if (end == item.first) {
                     end = item.second;
                 } else {
+                    //std::cout << std::hex << "push page = " << start << "-" << end << "\n";
                     dest.emplace_back(start, end);
                     start = item.first;
                     end = item.second;
                 }
             }
         });
+        //std::cout << "organized legal page size = " << dest.size() << "\n";
     }
 
     template<typename T>
@@ -188,29 +194,104 @@ namespace hak {
         return false;
     }
 
-    void scan_value(std::shared_ptr<process>& process, std::pair<pointer, pointer>& pair, std::vector<pointer>& result) {
-
-    }
-
-    void walk_matched_value(std::shared_ptr<process>& process, pointer start, pointer end, std::vector<value>::iterator value) {
-        switch (value->index()) {
+    auto get_value_size_by_type(value_type type) -> size_t {
+        switch (type) {
             case type_i8: {
-
+                return sizeof(i8);
             }
-
+            case type_i16: {
+                return sizeof(i16);
+            }
+            case type_i32: {
+                return sizeof(i32);
+            }
+            case type_i64: {
+                return sizeof(i64);
+            }
+            case type_u8: {
+                return sizeof(u8);
+            }
+            case type_u16: {
+                return sizeof(u16);
+            }
+            case type_u32: {
+                return sizeof(u32);
+            }
+            case type_u64: {
+                return sizeof(u64);
+            }
+            case type_float: {
+                return sizeof(float);
+            }
+            case type_double: {
+                return sizeof(double);
+            }
+            case type_range:
+            case type_unknown:
+                break;
         }
+        return 0;
     }
 
-    void memory_searcher::searchNumber(const std::string &expr, value_type default_type, match_sign sign) {
+    auto get_value_size(value value) -> size_t {
+        if (value.index() == type_range) {
+            auto range = std::get<hak::range>(value);
+            return get_value_size_by_type(range.type);
+        }
+        return get_value_size_by_type(static_cast<value_type>(value.index()));
+    }
+
+    auto scan_value(std::shared_ptr<process>& process, const std::pair<pointer, pointer>& pair, size_t size, // NOLINT(*-no-recursion)
+                    std::vector<value>::iterator value, match_sign sign, std::unordered_set<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
+        auto start = pair.first;
+        auto end = pair.second;
+        auto value_size = get_value_size(*value);
+        //std::cout << "value size = " << value_size << ", depth = " << depth << ", index = " << value->index() << "\n";
+        pointer addr = start;
+        do {
+            if (match_value(process, *value, addr, sign)) {
+                if (depth >= size - 2) {
+                    callback(addr);
+                    return true;
+                }
+                auto next = std::next(value);
+                scan_value(process, std::make_pair(addr, end), size, next, sign, result, depth + 1, [&](pointer _addr) {
+                    result.insert(_addr);
+                    callback(addr);
+                });
+            }
+            addr += value_size; // NOLINT(*-narrowing-conversions)
+        } while (addr <= end);
+        return false;
+    }
+
+    auto memory_searcher::searchNumber(const std::string &expr, value_type default_type, match_sign sign) -> size_t {
         auto values = hak::parse_search_number_expr(expr, default_type);
         if (values.empty()) {
-            return;
+            return 0;
         }
         std::vector<std::pair<pointer, pointer>> pages;
         organize_memory_page_groups(this->process, this->ignore_swapped_page, this->ignore_swapped_page, this->range, pages);
         std::for_each(pages.begin(), pages.end(), [&](const std::pair<pointer, pointer> &item) {
-
+            auto start = item.first;
+            auto end = item.second;
+            auto value_size = get_value_size(values[0]);
+            pointer addr = start;
+            do {
+                if (match_value(process, values[0], addr, sign)) {
+                    std::unordered_set<pointer> result;
+                    scan_value(process, std::make_pair(addr, end), values.size(), std::next(values.begin()), sign, result, 0, [&](pointer _addr) {
+                        result.insert(_addr);
+                        result.insert(addr);
+                        std::copy(result.begin(), result.end(), std::back_inserter(this->results));
+                    });
+                }
+                addr += value_size; // NOLINT(*-narrowing-conversions)
+            } while (addr < end);
         });
+        std::sort(this->results.begin(), this->results.end());
+        this->results.erase(std::unique(this->results.begin(), this->results.end()), this->results.end());
+        return this->results.size();
     }
 }
 
