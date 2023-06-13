@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
-project(Hakutaku)
+project(hak)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -28,23 +28,20 @@ if(IGNORE_MISSING_PAGE)
     add_definitions(-DIGNORE_MISSING_PAGE)
 endif()
 
+add_subdirectory(core)
+
 if(BUILD_UNIT_TEST)
     add_subdirectory(library/googletest)
     include_directories(googletest/include googletest)
 
     message("-- Build unit test")
-    add_executable(Hakutaku test/test.cpp
-            core/Hakutaku.hpp)
 
-    target_link_libraries(Hakutaku gtest gtest_main)
+    add_executable(${PROJECT_NAME} test/test.cpp)
 
-elseif (BUILD_FOR_CONSOLE)
-    message("-- Build for console")
-    add_executable(Hakutaku console/main.cpp
-            core/Hakutaku.hpp)
+    target_link_libraries(${PROJECT_NAME} hak::core)
+    target_link_libraries(${PROJECT_NAME} gtest gtest_main)
 else()
     message("-- Build common")
-    add_executable(Hakutaku main.cpp
-            core/Hakutaku.hpp)
+    add_executable(${PROJECT_NAME} main.cpp)
 endif()
 

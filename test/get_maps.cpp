@@ -1,37 +1,111 @@
 #include <gtest/gtest.h>
-#include "../core/Hakutaku.hpp"
+#include "proc.h"
+#include "process.h"
 
-TEST(GetMaps, Lite) {
-    std::string packageName = "com.example.app";
-    pid_t pid = Hakutaku::getPid(packageName);
-    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
+#include <iostream>
 
-    Hakutaku::Maps maps = Hakutaku::Maps();
-    int result = process->getMapsLite(maps, RANGE_ALL); // get full memory
-    if(result == RESULT_SUCCESS) {
-        maps.clear(); //  Clean up the results of the previous search in the map
+using namespace hak;
+  
+TEST(APP, GetMapsByPid) {
+    std::string packageName = "bin.mt.plus";
+    try {
+        auto pid = hak::find_process(packageName);
+        std::cout << "pid: " << pid << "\n";
+        auto maps = hak::get_maps(pid, hak::memory_range::A);
+        size_t size = 0;
+        do {
+            std::string range_name;
+            if (maps->range == memory_range::CA) {
+                range_name = "CA";
+            } else if (maps->range == memory_range::CD) {
+                range_name = "CD";
+            } else if (maps->range == memory_range::AS) {
+                range_name = "AS";
+            } else if (maps->range == memory_range::A) {
+                range_name = "A";
+            } else if (maps->range == memory_range::CH) {
+                range_name = "CH";
+            } else if (maps->range == memory_range::J) {
+                range_name = "J";
+            } else if (maps->range == memory_range::JH) {
+                range_name = "JH";
+            } else if (maps->range == memory_range::PS) {
+                range_name = "PS";
+            } else if (maps->range == memory_range::CB) {
+                range_name = "CB";
+            } else if (maps->range == memory_range::BAD) {
+                range_name = "B";
+            } else if (maps->range == memory_range::V) {
+                range_name = "V";
+            } else if (maps->range == memory_range::XA) {
+                range_name = "XA";
+            } else if (maps->range == memory_range::S) {
+                range_name = "S";
+            } else if (maps->range == memory_range::OTHER) {
+                range_name = "O";
+            } else if (maps->range == memory_range::XS) {
+                range_name = "XS";
+            }
+            std::cout << "Maps-start: " << std::hex << maps->start() << ", inode: " << maps->inode << ", name: 【" << maps->module_name << "】，range: " << std::dec << range_name << "\n";
+            size += maps->end() - maps->start();
+        } while ((maps = maps->next()));
+        std::cout << "size: " << (double) size / (1024 * 1024) << " Mb\n";
+    } catch (std::exception& e) {
+        std::cout << "error: " << e.what() << "\n";
     }
-
-    int result2 = process.getMapsLite(maps, RANGE_A | RANGE_CA | RANGE_CB); // Get A, CA, CB memory
 }
 
-// Lite模式不包含以下信息
-// Lite mode does not contain the following information
-//char perms[5]; // r-x
-//unsigned long inode; // inode
-//char name[512]; // 段名称
-
-TEST(GetMaps, Full) {
-    std::string packageName = "com.example.app";
-    pid_t pid = Hakutaku::getPid(packageName);
-    std::shared_ptr<Hakutaku::Process> process = Hakutaku::openProcess(pid);
-
-    Hakutaku::Maps maps = Hakutaku::Maps();
-    process->getMaps(maps, RANGE_ALL);
-    Hakutaku::Utils::printMaps(maps); // Print maps information to the console
+TEST(APP, GetMapsByProcess) {
+    std::string packageName = "bin.mt.plus";
+    try {
+        auto pid = hak::find_process(packageName);
+        std::cout << "pid: " << pid << "\n";
+        auto process = std::make_shared<hak::process>(pid);
+        auto maps = process->get_maps(hak::memory_range::A);
+        size_t size = 0;
+        do {
+            std::string range_name;
+            if (maps->range == memory_range::CA) {
+                range_name = "CA";
+            } else if (maps->range == memory_range::CD) {
+                range_name = "CD";
+            } else if (maps->range == memory_range::AS) {
+                range_name = "AS";
+            } else if (maps->range == memory_range::A) {
+                range_name = "A";
+            } else if (maps->range == memory_range::CH) {
+                range_name = "CH";
+            } else if (maps->range == memory_range::J) {
+                range_name = "J";
+            } else if (maps->range == memory_range::JH) {
+                range_name = "JH";
+            } else if (maps->range == memory_range::PS) {
+                range_name = "PS";
+            } else if (maps->range == memory_range::CB) {
+                range_name = "CB";
+            } else if (maps->range == memory_range::BAD) {
+                range_name = "B";
+            } else if (maps->range == memory_range::V) {
+                range_name = "V";
+            } else if (maps->range == memory_range::XA) {
+                range_name = "XA";
+            } else if (maps->range == memory_range::S) {
+                range_name = "S";
+            } else if (maps->range == memory_range::OTHER) {
+                range_name = "O";
+            } else if (maps->range == memory_range::XS) {
+                range_name = "XS";
+            }
+            std::cout << "Maps-start: " << std::hex << maps->start() << ", inode: " << maps->inode << ", name: 【" << maps->module_name << "】，range: " << std::dec << range_name << "\n";
+            size += maps->end() - maps->start();
+        } while ((maps = maps->next()));
+        std::cout << "size: " << (double) size / (1024 * 1024) << " Mb\n";
+    } catch (std::exception& e) {
+        std::cout << "error: " << e.what() << "\n";
+    }
 }
 
-int main() {
+auto main() -> int {
     ::testing::InitGoogleTest();
     return RUN_ALL_TESTS();
 }
