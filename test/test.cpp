@@ -4,6 +4,7 @@
 #include "reader.h"
 #include "writer.h"
 #include "searcher.h"
+#include "buffer_utils.h"
 #include <unistd.h>
 #include <sys/mman.h>
 
@@ -18,13 +19,6 @@ TEST(APP, GetPid) {
         std::cout << "pid: " << pid << "\n";
         auto process = std::make_shared<hak::process>(pid);
         process->set_memory_mode(memory_mode::SYSCALL);
-        auto searcher = hak::memory_searcher(process);
-        auto reader = hak::memory_reader(process);
-        searcher.set_memory_range(memory_range::A);
-        auto size = searcher.searchNumber("1D;2D;0D;1D", type_i32, EQ);
-        std::cout << "search result size: " << size << "\n";
-        size = searcher.filterNumber("2D;0D;1D", type_i32, EQ);
-        std::cout << "filter result size: " << size << "\n";
 
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";

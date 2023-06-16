@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <functional>
 #include <algorithm>
+#include <utility>
 #include <unistd.h>
 
 namespace hak {
@@ -45,7 +46,7 @@ namespace hak {
 
     auto hak::memory_searcher::organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest) {
         std::vector<std::pair<pointer, pointer>> pages;
-        auto maps = this->process->get_maps(range);
+        auto maps = this->process->get_maps(this->range);
         do {
             get_legal_pages(process, maps, this->config.ignore_swapped_page, this->config.ignore_missing_page, pages);
         } while ((maps = maps->next()));
@@ -222,6 +223,7 @@ namespace hak {
             }
             case type_range:
             case type_unknown:
+            case type_pointer:
                 break;
         }
         return 0;

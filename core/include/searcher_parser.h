@@ -19,7 +19,8 @@ namespace hak {
         type_float = 8,
         type_double = 9,
         type_range = 10,
-        type_unknown = 11
+        type_pointer = 11,
+        type_unknown = 12
     };
     using basic_value = std::variant<i8, i16, i32, i64, u8, u16, u32, u64, double, float>;
 
