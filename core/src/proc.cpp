@@ -4,6 +4,24 @@
 #include <string>
 #include <cctype>
 
+auto hak::get_pid_list() -> std::vector<pid_t> {
+    std::vector<pid_t> list;
+    auto *proc_dir = opendir("/proc");
+    if (proc_dir == nullptr) {
+        throw std::runtime_error("Failed to open /proc.");
+    }
+    struct dirent* pid_file;
+    while ((pid_file = readdir(proc_dir)) != nullptr) {
+        if (pid_file->d_type != DT_DIR || ((std::isdigit(pid_file->d_name[0])) == 0)) {
+            continue;
+        }
+        pid_t pid = std::stoi(pid_file->d_name);
+        list.emplace_back(pid);
+    }
+    closedir(proc_dir);
+    return std::move(list);
+}
+
 auto hak::find_process(std::string &package) -> pid_t {
     /*
     // As a modern c++, the efficiency is not flattering.
@@ -53,3 +71,4 @@ auto hak::find_process(std::string &package) -> pid_t {
     closedir(proc_dir);
     throw no_process_error();
 }
+
