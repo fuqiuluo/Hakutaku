@@ -19,7 +19,9 @@ TEST(APP, GetPid) {
         std::cout << "pid: " << pid << "\n";
         auto process = std::make_shared<hak::process>(pid);
         process->set_memory_mode(memory_mode::SYSCALL);
-
+        for (auto &item: hak::get_process_list()) {
+            std::cout << "pid = " << item.pid << ", comm = " << item.comm << ", state = " << item.state << "\n";
+        }
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";
     }
