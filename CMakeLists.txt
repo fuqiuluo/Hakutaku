@@ -45,7 +45,9 @@ if(BUILD_UNIT_TEST)
 elseif (BUILD_JNI)
     message("-- Build for jni")
 
-    add_library(${PROJECT_NAME} SHARED jni/main.cpp)
+    add_library(${PROJECT_NAME} SHARED
+            jni/jni_proc.cpp
+    )
 
     target_link_libraries(${PROJECT_NAME} hak::core)
     target_link_libraries(${PROJECT_NAME} hak::jni)

@@ -7,3 +7,7 @@ auto hak::get_string(JNIEnv *env, jstring jstr) -> std::string {
     env->ReleaseStringUTFChars(jstr, cstr);
     return std::move(str);
 }
+
+auto hak::string_to_jstring(JNIEnv *env, const std::string &str) -> jstring {
+    return env->NewStringUTF(str.c_str());
+}

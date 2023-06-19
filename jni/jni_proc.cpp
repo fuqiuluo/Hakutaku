@@ -30,3 +30,25 @@ Java_moe_fuqiuluo_hak_external_Platform_getPidList(JNIEnv *env, jobject thiz) ->
     return arrayList;
 }
 
+extern "C"
+JNIEXPORT auto JNICALL
+Java_moe_fuqiuluo_hak_external_ProcessUtils_getProcessList(JNIEnv *env, jobject thiz) -> jobject {
+    auto proc_list = hak::get_process_list();
+    jclass arrayList_clz = env->FindClass("java/util/ArrayList");
+    jmethodID arraylist_init = env->GetMethodID(arrayList_clz, "<init>", "()V");
+    jmethodID arraylist_add = env->GetMethodID(arrayList_clz, "add", "(Ljava/lang/Object;)Z");
+    jobject arraylist = env->NewObject(arrayList_clz, arraylist_init);
+
+    jclass proc_stat = env->FindClass("moe/fuqiuluo/hak/external/ProcessUtils$ProcStat");
+    jmethodID proc_stat_init = env->GetMethodID(proc_stat, "<init>", "(ILjava/lang/String;CI)V");
+
+    for (const auto &stat : proc_list) {
+        jobject object = env->NewObject(proc_stat,
+            proc_stat_init,
+            stat.pid, hak::string_to_jstring(env, stat.comm), stat.state, stat.ppid
+        );
+        env->CallBooleanMethod(arraylist, arraylist_add, object);
+    }
+
+    return arraylist;
+}

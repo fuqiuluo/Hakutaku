@@ -144,6 +144,7 @@ namespace hak {
                 return match_range_value<double>(process, address, value, GE, LE);
             }
             case type_range:
+            case type_pointer:
             case type_unknown:
                 break;
         }
