@@ -6,10 +6,18 @@
 #include <string>
 
 namespace hak {
+    // Hakutaku
     class no_process_error : public std::exception {
     public:
         [[nodiscard]] auto what() const noexcept -> const char* override {
             return "No corresponding process found.";
+        }
+    };
+
+    class recursive_maps_error : public std::exception {
+    public:
+        [[nodiscard]] auto what() const noexcept -> const char* override {
+            return "Recursive pagemaps.";
         }
     };
 

@@ -39,7 +39,9 @@ auto hak::get_process_list() -> std::vector<hak::proc_stat> {
         iss >> my_stat.comm;
         iss >> my_stat.state;
         iss >> my_stat.ppid;
-        list.push_back(my_stat);
+        if (my_stat.state == 'R' || my_stat.state == 'S' || my_stat.state == 'D') {
+            list.push_back(my_stat);
+        }
     }
     closedir(proc_dir);
     return std::move(list);

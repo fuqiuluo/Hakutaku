@@ -15,6 +15,9 @@ hak::proc_maps::proc_maps(pointer start, pointer end) {
 }
 
 void hak::proc_maps::insert(std::shared_ptr<hak::proc_maps> maps) { // NOLINT(*-unnecessary-value-param)
+    if (maps == shared_from_this()) {
+        throw hak::recursive_maps_error();
+    }
     if (this->_tail == nullptr) {
         this->_tail = maps;
     } else {

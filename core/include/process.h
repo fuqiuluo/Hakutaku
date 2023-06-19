@@ -29,6 +29,8 @@ namespace hak {
         explicit process(pid_t pid);
         ~process();
 
+        auto is_running() const -> bool;
+
         [[nodiscard]] auto get_maps(i32 range = ALL) const -> std::shared_ptr<proc_maps>;
 
         void read(pointer addr, void *data, size_t len);

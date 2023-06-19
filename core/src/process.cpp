@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <string>
+#include <sstream>
 #include "process.h"
 #include "memory.h"
 
@@ -76,4 +77,23 @@ void hak::process::init_pagemaps_fd() {
 auto hak::process::get_page_entry(pointer address) -> hak::pagemap_entry {
     this->init_pagemaps_fd();
     return hak::get_pagemap_entry(this->pagemap_fd, address);
+}
+
+auto hak::process::is_running() const -> bool {
+    char stat[256];
+    std::string file_path = "/proc/" + std::to_string(this->pid) + "/stat";
+    FILE* _fp = fopen(file_path.c_str(), "r");
+    if (_fp != nullptr) {
+        std::fgets(stat, sizeof(stat), _fp);
+        std::fclose(_fp);
+        std::istringstream iss((std::string(stat)));
+        std::string token;
+        for (int i = 0; i < 3; ++i) {
+            iss >> token;
+        }
+        if (token == "R" || token == "S" || token == "D") {
+            return true;
+        }
+    }
+    return false;
 }
