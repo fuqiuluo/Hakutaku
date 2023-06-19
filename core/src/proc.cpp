@@ -35,6 +35,7 @@ auto hak::get_process_list() -> std::vector<hak::proc_stat> {
         read_proc_file<sizeof(stat)>(pid, "stat", stat);
         std::istringstream iss((std::string(stat)));
         iss >> my_stat.pid;
+        //my_stat.pid = pid;
         iss >> my_stat.comm;
         iss >> my_stat.state;
         iss >> my_stat.ppid;
