@@ -11,3 +11,6 @@ Hakutaku's name is Bai Ze, which means omniscient. A memory modifier key wizard 
 
 Hakutaku is a memory modification tool based on the Android SDK 24+.
 
+# Thanks
+
+- [linux-kernel-module-cheat](https://github.com/cirosantilli/linux-kernel-module-cheat)
