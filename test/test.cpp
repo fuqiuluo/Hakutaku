@@ -5,7 +5,6 @@
 #include "writer.h"
 #include "searcher.h"
 #include "buffer_utils.h"
-#include "proc_listener.h"
 #include <unistd.h>
 #include <sys/mman.h>
 
