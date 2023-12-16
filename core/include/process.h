@@ -37,11 +37,16 @@ namespace hak {
 
         void write(pointer addr, void *data, size_t len);
 
+        void read_pointer(pointer addr, pointer *data);
+
         void set_memory_mode(memory_mode mode);
 
         auto get_page_entry(pointer address) -> hak::pagemap_entry;
+
+        void dump_memory(pointer addr, int line = 8);
     private:
         void init_mem_fd();
+
         void init_pagemaps_fd();
     };
 }

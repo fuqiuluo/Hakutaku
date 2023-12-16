@@ -61,6 +61,8 @@ namespace hak {
     };
 
     auto get_maps(pid_t pid, i32 range = memory_range::ALL) -> std::shared_ptr<proc_maps>;
+
+    void determine_range(hak::proc_maps* maps, bool last_is_cd);
 }
 
 #endif // PROC_MAPS_H

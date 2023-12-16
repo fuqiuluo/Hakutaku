@@ -7,7 +7,7 @@
 
 namespace hak {
     auto get_pagemap_entry(handle pagemap_fd, pointer vaddr) -> pagemap_entry { // NOLINT(*-easily-swappable-parameters)
-        pagemap_entry entry;
+        pagemap_entry entry{};
         size_t nread;
         int64_t ret;
         uint64_t data;

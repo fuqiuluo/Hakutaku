@@ -63,7 +63,7 @@ auto hak::proc_maps::last() -> std::shared_ptr<hak::proc_maps> {
     return result;
 }
 
-void determine_range(hak::proc_maps* maps, bool last_is_cd) { // NOLINT(*-no-recursion)
+void hak::determine_range(hak::proc_maps* maps, bool last_is_cd) { // NOLINT(*-no-recursion)
     using namespace hak;
     auto *module_name = maps->module_name;
     if (maps->executable) {

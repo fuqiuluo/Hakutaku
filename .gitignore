@@ -3,4 +3,8 @@
 /cmake-build-androidarm64/
 /cmake-build-androidx64/
 /cmake-build-androidx86/
+/cmake-build-arm/
+/cmake-build-arm64/
+/cmake-build-x64/
+/cmake-build-x86/
 /library/

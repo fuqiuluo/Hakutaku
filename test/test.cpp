@@ -12,6 +12,10 @@
 
 using namespace hak;
 
+TEST(MEM, ABC) {
+
+}
+
 TEST(APP, GetPid) {
     std::string packageName = "bin.mt.plus";
     try {
@@ -19,7 +23,6 @@ TEST(APP, GetPid) {
         std::cout << "pid: " << pid << "\n";
         auto process = std::make_shared<hak::process>(pid);
         process->set_memory_mode(memory_mode::SYSCALL);
-
     } catch (std::exception& e) {
         std::cout << "error: " << e.what() << "\n";
     }

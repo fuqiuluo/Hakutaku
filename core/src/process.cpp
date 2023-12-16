@@ -16,6 +16,10 @@ hak::process::process(pid_t pid) {
 }
 
 void hak::process::read(pointer addr, void *data, size_t len) {
+    auto entry = get_page_entry(addr);
+    if (!entry.present) {
+        throw std::runtime_error("The page is not present.");
+    }
     if (this->mem_mode == DIRECT) {
         read_direct(addr, data, len);
     } else if (this->mem_mode == MEM_FILE) {
@@ -96,4 +100,20 @@ auto hak::process::is_running() const -> bool {
         }
     }
     return false;
+}
+
+void hak::process::read_pointer(pointer addr, pointer *data) {
+    read(addr, data, sizeof(pointer));
+}
+
+void hak::process::dump_memory(pointer addr, int line) {
+    char data[16];
+    for (int i = 0; i < line; ++i) {
+        read(addr + i * 16, data, sizeof(data));
+        printf("%p | ", (void*) (addr + i * 16));
+        for (char j : data) {
+            printf("%02x ", (unsigned char) j);
+        }
+        printf("\n");
+    }
 }

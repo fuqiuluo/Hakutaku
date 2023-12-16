@@ -1,5 +1,6 @@
 #include "searcher.h"
 
+#include <utility>
 #include <vector>
 #include <unordered_set>
 #include <functional>
@@ -9,7 +10,7 @@
 
 namespace hak {
     memory_searcher::memory_searcher(std::shared_ptr<hak::process> process) {
-        this->process = process;
+        this->process = std::move(process);
     }
 
     void memory_searcher::set_memory_range(i32 _range) {
@@ -44,7 +45,7 @@ namespace hak {
         }
     }
 
-    auto hak::memory_searcher::organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest) {
+    void hak::memory_searcher::organize_memory_page_groups(std::vector<std::pair<pointer, pointer>>& dest) {
         std::vector<std::pair<pointer, pointer>> pages;
         auto maps = this->process->get_maps(this->range);
         do {
@@ -190,7 +191,7 @@ namespace hak {
         return false;
     }
 
-    auto get_value_size_by_type(value_type type) -> size_t {
+    auto memory_searcher::get_value_size_by_type(value_type type) -> size_t {
         switch (type) {
             case type_i8: {
                 return sizeof(i8);
@@ -230,10 +231,10 @@ namespace hak {
         return 0;
     }
 
-    auto get_value_size(value value) -> size_t {
+    auto memory_searcher::get_value_size(value value) -> size_t {
         if (value.index() == type_range) {
-            auto range = std::get<hak::range>(value);
-            return get_value_size_by_type(range.type);
+            auto _range = std::get<hak::range>(value);
+            return get_value_size_by_type(_range.type);
         }
         return get_value_size_by_type(static_cast<value_type>(value.index()));
     }
@@ -243,7 +244,7 @@ namespace hak {
         //std::vector<value>::iterator value, match_sign sign, std::vector<pointer>& result, i32 depth, std::function<void(pointer addr)> callback) -> bool {
         auto start = pair.first;
         auto end = pair.second;
-        auto value_size = get_value_size(*value);
+        auto value_size = memory_searcher::get_value_size(*value);
         //std::cout << "value size = " << value_size << ", depth = " << depth << ", index = " << value->index() << "\n";
         pointer addr = start;
         do {

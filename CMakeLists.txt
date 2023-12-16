@@ -6,12 +6,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 # PROJECT SETTING
 set(BUILD_USE_64BITS ON)
-set(BUILD_UNIT_TEST ON)
+set(BUILD_UNIT_TEST OFF)
 set(BUILD_JNI OFF)
 
 # PLATFORM SETTING
 set(HAKUTAKU_64BIT ON) # 64bit platform
-set(IGNORE_MISSING_PAGE OFF) # ignore missing page
+set(IGNORE_MISSING_PAGE ON) # ignore missing page
 set(SUPPORT_UNALIGNED_MEMORY OFF) # support unaligned memory access
 
 if(HAKUTAKU_64BIT)
@@ -61,6 +61,9 @@ elseif (BUILD_JNI)
     target_link_libraries(${PROJECT_NAME} hak::jni)
 else()
     message("-- Build common")
+
     add_executable(${PROJECT_NAME} main.cpp)
+
+    target_link_libraries(${PROJECT_NAME} hak::core)
 endif()
 
