@@ -88,12 +88,46 @@ auto hak::find_process(std::string &package) -> pid_t {
         pid_t pid = std::stoi(pid_file->d_name);
         read_proc_file<sizeof(cmd_line)>(pid, "cmdline", cmd_line);
         if (package == cmd_line) {
+            pid_t p = std::stoi(pid_file->d_name);
             closedir(proc_dir);
-            return std::stoi(pid_file->d_name);
+            return p;
         }
     }
     closedir(proc_dir);
     throw no_process_error();
 }
 
+auto hak::find_process(const char *package) -> pid_t {
+    auto p = std::string(package);
+    return find_process(p);
+}
+
+uint64_t hak::get_module_base(pid_t pid, const char *module_path) {
+    FILE *fp = nullptr;
+    char *pch = nullptr;
+    char filename[32];
+    char line[512];
+    uint64_t addr = 0;
+
+    if ( pid < 0 )
+        snprintf(filename, sizeof(filename), "/proc/self/maps");
+    else
+        snprintf(filename, sizeof(filename), "/proc/%d/maps", pid);
+
+    if ( (fp = fopen(filename, "r")) == nullptr ){
+        printf("open %s failed!\n", filename);
+        return 0;
+    }
+
+    while ( fgets(line, sizeof(line), fp) ){
+        if ( strstr(line, module_path) ){
+            pch = strtok(line, "-");
+            addr = strtoull(pch, nullptr, 16);
+            break;
+        }
+    }
+
+    fclose(fp);
+    return addr;
+}
 

@@ -2,7 +2,10 @@
 #define HAK_BUFFER_UTILS_H
 
 #include <sys/endian.h>
+#include <string>
 #include "types.h"
+
+#define USHORT uint32_t
 
 namespace hak {
     void int16_to_buf(i16 num, char* buf);

@@ -47,7 +47,7 @@ namespace hak {
         }
         uint64_t info;
         if(read(fd, &info, sizeof(uint64_t)) != sizeof(uint64_t)) {
-            printf("read() failed!\n");
+            printf("readRaw() failed!\n");
             close(fd);
             return 0;
         }

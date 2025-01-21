@@ -5,6 +5,8 @@
 /cmake-build-androidx86/
 /cmake-build-arm/
 /cmake-build-arm64/
+/cmake-build-arm64-vcpkg/
 /cmake-build-x64/
 /cmake-build-x86/
 /library/
+/vcpkg_installed/

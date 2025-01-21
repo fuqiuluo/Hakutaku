@@ -23,6 +23,10 @@ namespace hak {
     auto get_pid_list() -> std::vector<pid_t>;
 
     auto find_process(std::string& package) -> pid_t;
+
+    auto find_process(const char* package) -> pid_t;
+
+    uint64_t get_module_base(pid_t pid, const char *module_path);
 }
 
 #endif // PROC_H

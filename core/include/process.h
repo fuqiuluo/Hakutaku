@@ -33,11 +33,25 @@ namespace hak {
 
         [[nodiscard]] auto get_maps(i32 range = ALL) const -> std::shared_ptr<proc_maps>;
 
-        void read(pointer addr, void *data, size_t len);
+        template<typename T>
+        T read(pointer addr) {
+            T data;
+            size_t len = sizeof(T);
+            readRaw(addr, &data, len);
+            return data;
+        }
+
+        template<typename T>
+        void read(pointer addr, T *dest) {
+            readRaw(addr, dest, sizeof(T));
+        }
+
+        void readRaw(pointer addr, void *data, size_t len);
 
         void write(pointer addr, void *data, size_t len);
 
         void read_pointer(pointer addr, pointer *data);
+        pointer read_pointer2(pointer addr);
 
         void set_memory_mode(memory_mode mode);
 

@@ -46,7 +46,7 @@ auto hak::memory_reader::read_double(pointer address) -> double {
 
 auto hak::memory_reader::read_bytes(pointer address, size_t size) -> std::vector<char> {
     char temp[size];
-    this->process->read(address, &temp, size);
+    this->process->readRaw(address, &temp, size);
     std::vector<char> vec(size);
     vec.insert(vec.end(), temp, temp + size);
     return std::move(vec);
@@ -58,17 +58,17 @@ auto hak::memory_reader::read_pointer(pointer address) -> pointer {
 
 auto hak::memory_reader::read_string(pointer address, size_t size) -> std::string {
     char temp[size];
-    this->process->read(address, &temp, size);
+    this->process->readRaw(address, &temp, size);
     return {temp};
 }
 
 void hak::memory_reader::read(pointer address, void *data, size_t size) {
-    this->process->read(address, data, size);
+    this->process->readRaw(address, data, size);
 }
 
 template<typename T>
 auto hak::memory_reader::read(pointer address) -> T {
     T temp;
-    this->process->read(address, &temp, sizeof(T));
+    this->process->readRaw(address, &temp, sizeof(T));
     return temp;
 }

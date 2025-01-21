@@ -2,12 +2,18 @@
 
 #include <sys/endian.h>
 #include <sstream>
+#include <endian.h>
+#include <span>
 #include <iomanip>
+#include <bit>
+#include <iostream>
 
 namespace hak {
     void int16_to_buf(i16 num, char *buf) {
-        int16_t tmp = htons(num);
-        memcpy(buf, &tmp, sizeof(tmp));
+        if constexpr (std::endian::native == std::endian::little) {
+            num = static_cast<i16>((num >> 8) | (num << 8));
+        }
+        std::memcpy(buf, &num, sizeof(num));
     }
 
     void int32_to_buf(i32 num, char *buf) {
@@ -24,7 +30,7 @@ namespace hak {
         union {
             i64 i;
             float f;
-        } tmp;
+        } tmp{};
         tmp.f = num;
         int64_to_buf(tmp.i, buf);
     }
@@ -33,7 +39,7 @@ namespace hak {
         union {
             i64 i;
             double d;
-        } tmp;
+        } tmp{};
         tmp.d = num;
         int64_to_buf(tmp.i, buf);
     }
@@ -57,7 +63,7 @@ namespace hak {
         union {
             i64 i;
             float f;
-        } temp;
+        } temp{};
         uint64_t tmp = *(uint64_t*)buf;
         temp.i = be64toh(tmp);
         return temp.f;
@@ -67,7 +73,7 @@ namespace hak {
         union {
             i64 i;
             double d;
-        } temp;
+        } temp{};
         uint64_t tmp = *(uint64_t*)buf;
         temp.i = be64toh(tmp);
         return temp.d;

@@ -187,8 +187,8 @@ void llex_maps(pid_t pid, const std::function<void(std::shared_ptr<hak::proc_map
 
         auto address = tokens[0];
         std::string::size_type pos = address.find('-');
-        pointer start_addr = std::stol(address.substr(0, pos), nullptr, 16);
-        pointer end_addr = std::stol(address.substr(pos + 1), nullptr, 16);
+        pointer start_addr = std::stoll(address.substr(0, pos), nullptr, 16);
+        pointer end_addr = std::stoll(address.substr(pos + 1), nullptr, 16);
         auto pmaps = std::make_shared<hak::proc_maps>(start_addr, end_addr);
         auto perms = tokens[1];
         pmaps->readable = perms[0] == 'r';

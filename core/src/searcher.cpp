@@ -75,7 +75,7 @@ namespace hak {
     template<typename T>
     auto match_number_value(std::shared_ptr<process>& process, pointer address, T& value, match_sign sign) -> bool {
         T temp;
-        process->read(address, &temp, sizeof(temp));
+        process->readRaw(address, &temp, sizeof(temp));
         if (sign == EQ && temp == value) {
             return true;
         }

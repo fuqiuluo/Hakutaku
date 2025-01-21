@@ -1,6 +1,10 @@
 #include "fuzzy.h"
 
 #include <utility>
+#include <string>
+#include <algorithm>
+#include <iostream>
+#include <vector>
 
 #include "exception.h"
 

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <variant>
+#include "ida.h"
 
 using handle = int;
 
@@ -15,7 +16,7 @@ using u16 = uint16_t;
 using u8 = uint8_t;
 
 #ifdef HAKUTAKU_64BIT
-using pointer = std::int64_t;
+using pointer = std::uint64_t;
 #else
 typedef std::int32_t pointer;
 #endif

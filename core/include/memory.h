@@ -5,6 +5,7 @@
 #include "proc_maps.h"
 
 #include <memory>
+#include <vector>
 #include <cstring>
 #include <sys/uio.h>
 #include <unistd.h>

@@ -17,7 +17,7 @@ TEST(MEM, ABC) {
 }
 
 TEST(APP, GetPid) {
-    std::string packageName = "bin.mt.plus";
+[[maybe_unused]] std::string packageName = "bin.mt.plus";
     try {
         auto pid = hak::find_process(packageName);
         std::cout << "pid: " << pid << "\n";

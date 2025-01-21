@@ -11,7 +11,7 @@ void hak::read_by_syscall(pid_t pid, pointer addr, void *data, size_t len) {
     iovec local{ data, len };
     iovec remote{ (void*) addr, len };
     if (process_vm_readv(pid, &local, 1, &remote, 1, 0) != len) {
-        std::string hexStr = (std::stringstream() << "Memory read Error: " << std::hex << addr << ".").str();
+        std::string hexStr = (std::stringstream() << "Memory readRaw Error: " << std::hex << addr << ".").str();
         throw hak::memory_operate_error(hexStr);
     }
 }
@@ -61,8 +61,8 @@ std::vector<hak::proc_maps> hak::get_process_maps(pid_t pid) {
 
         auto address = tokens[0];
         std::string::size_type pos = address.find('-');
-        pointer start_addr = std::stol(address.substr(0, pos), nullptr, 16);
-        pointer end_addr = std::stol(address.substr(pos + 1), nullptr, 16);
+        pointer start_addr = std::stoull(address.substr(0, pos), nullptr, 16);
+        pointer end_addr = std::stoull(address.substr(pos + 1), nullptr, 16);
         auto pmaps = hak::proc_maps(start_addr, end_addr);
         auto perms = tokens[1];
         pmaps.readable = perms[0] == 'r';
@@ -70,7 +70,7 @@ std::vector<hak::proc_maps> hak::get_process_maps(pid_t pid) {
         pmaps.executable = perms[2] == 'x';
         pmaps.is_private = perms[3] == 'p';
         pmaps.offset = std::stoll(tokens[2], nullptr, 16);
-        pmaps.inode = std::stoi(tokens[4]);
+        //pmaps.inode = std::stoi(tokens[4]);
         std::string module_name;
         if (tokens.size() > 5) {
             for (int i = 5; i < tokens.size(); i++) {

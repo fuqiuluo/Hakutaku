@@ -1,0 +1,5 @@
+#ifndef HAK_GUOBJECTS_H
+#define HAK_GUOBJECTS_H
+
+
+#endif //HAK_GUOBJECTS_H

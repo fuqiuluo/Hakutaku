@@ -9,6 +9,10 @@ set(BUILD_USE_64BITS ON)
 set(BUILD_UNIT_TEST OFF)
 set(BUILD_JNI OFF)
 
+set(BUILD_SHARED_LIBS OFF)
+set(BUILD_STATIC_LIBS ON)
+set(RapidJSON_POPULATED ON)
+
 # PLATFORM SETTING
 set(HAKUTAKU_64BIT ON) # 64bit platform
 set(IGNORE_MISSING_PAGE ON) # ignore missing page
@@ -31,6 +35,12 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(jni)
+add_subdirectory(uedumper)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexceptions")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
 
 if(BUILD_UNIT_TEST)
     include(FetchContent)
@@ -59,11 +69,21 @@ elseif (BUILD_JNI)
 
     target_link_libraries(${PROJECT_NAME} hak::core)
     target_link_libraries(${PROJECT_NAME} hak::jni)
+elseif (BUILD_UE4_SDK)
+    message("-- Build for ue4 hook")
+
+    add_library(${PROJECT_NAME} ue4-hooker/src/main.cpp)
 else()
     message("-- Build common")
 
+    # 使用vcpkg
+    # -DCMAKE_TOOLCHAIN_FILE={XXX}\vcpkg\scripts\buildsystems\vcpkg.cmake
+    # Linux
+    # export ANDROID_NDK_HOME={NDK路径} 记得设置NDK
+    # Windows
+    # SET ANDROID_NDK_HOME={NDK路径}
     add_executable(${PROJECT_NAME} main.cpp)
 
     target_link_libraries(${PROJECT_NAME} hak::core)
+    target_link_libraries(${PROJECT_NAME} hak::uedumper)
 endif()
-
